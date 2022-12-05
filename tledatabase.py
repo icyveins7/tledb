@@ -263,7 +263,7 @@ class TleDatabase:
     #%% Individual satellite tables
     def makeSatelliteTable(self, src: str, name: str):
         stmt = 'create table if not exists "%s"(%s)' % (
-            self._makeTableName(src, name), self._makeTableColumns(self.satellite_table_fmt))
+            self._makeTableName(src, name), self._makeTableStatement(self.satellite_table_fmt))
         # print(stmt)
         self.cur.execute(stmt)
         self.con.commit()
@@ -287,7 +287,7 @@ class TleDatabase:
             
         else:
             # Search all tables that contain the name
-            stmt = "select name from sqlite_master where name LIKE '%%%s%%'" % (name) # Remember to escape the % signs
+            stmt = "select name from sqlite_master where name LIKE '%%%s%%' and type='table'" % (name) # Remember to escape the % signs
             self.cur.execute(stmt)
             tables = [i[0] for i in self.cur.fetchall()] # Unpack the tuples
             
