@@ -12,13 +12,16 @@ import re
 import datetime as dt
 import numpy as np
 
+from genericdb import Database
+
 #%%
-class TleDatabase:
+class TleDatabase(Database):
     '''
     Represents a database of TLEs, ordered by sources (which is a key-value dictionary) and satellite names.
     '''
     
     srcs = {
+        'active': "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle",
         'stations': "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle",
         'geo': "https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=tle",
         'starlink': "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle",
@@ -48,15 +51,8 @@ class TleDatabase:
         dbpath : str
             File path of the database.
         '''
+        super().__init__(dbpath)
         self.usedSrcs = None
-        
-        self.dbpath = dbpath
-        self.con = sq.connect(self.dbpath)
-        self.cur = self.con.cursor()
-        
-    def commit(self):
-        # Simple redirect for brevity
-        self.con.commit()
         
     #%% Discovery methods
     def getAvailableSrcs(self):
@@ -212,26 +208,9 @@ class TleDatabase:
         
         return data, time_retrieved
             
-        
-    
-    #%% Helper functions (generally don't need to call these externally)
+    #%% Helper methods
     def _makeTableName(self, src: str, name: str):
         return "%s_%s" % (src, name)
-    
-    def _makeTableColumns(self, fmt: dict):
-        return ', '.join([' '.join(i) for i in fmt['cols']])
-    
-    def _makeTableConditions(self, fmt: dict):
-        return ', '.join(fmt['conds'])
-    
-    def _makeTableStatement(self, fmt: dict):
-        return "%s, %s" % (
-                self._makeTableColumns(fmt),
-                self._makeTableConditions(fmt)
-            )
-    
-    def _makeQuestionMarks(self, fmt: dict):
-        return ','.join(["?"] * len(fmt['cols']))
     
     #%% TLE parsing
     @staticmethod # allow calls from outside a class object
