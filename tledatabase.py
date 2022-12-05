@@ -14,8 +14,12 @@ import datetime as dt
 #%%
 class TleDatabase:
     srcs = {
-        'geo': "https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=tle"
-    }
+        'stations': "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle",
+        'geo': "https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=tle",
+        'starlink': "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle",
+        'gnss': "https://celestrak.org/NORAD/elements/gp.php?GROUP=gnss&FORMAT=tle",
+        'cubesat': "https://celestrak.org/NORAD/elements/gp.php?GROUP=cubesat&FORMAT=tle"
+    } # Maybe can generate the link, if the celestrak website continues this format
     
     #%% Table definitions
     satellite_table_fmt = {
@@ -29,7 +33,7 @@ class TleDatabase:
         ]
     }
     
-    #%% Constructor
+    #%% Constructor and other miscellaneous methods
     def __init__(self, dbpath: str):
         self.usedSrcs = None
         
@@ -41,6 +45,13 @@ class TleDatabase:
         # Simple redirect for brevity
         self.con.commit()
         
+    #%% Discovery methods
+    def getAvailableSrcs(self):
+        return self.srcs
+    
+    def setAvailableSrcs(self, newsrcs: dict):
+        self.srcs = newsrcs
+        
     #%% Common use-case methods
     def update(self, verbose: bool=True):
         # Download
@@ -48,13 +59,17 @@ class TleDatabase:
         # Parse the data
         alltles = self.parseTleDataSrcs(data)
         # Insert rows
-        for name, tle in alltles.items():
-            print("Updating %s" % (name))
-            # Create table if necessary
-            self.makeSatelliteTable(name)
-            # Insert into it
-            self.insertSatelliteTle(name, time_retrieved[name], tle[0], tle[1])
-            
+        for src, tles in alltles.items():
+            # Get the time for this source
+            src_tr = time_retrieved[src]
+            # Iterate over individual satellites
+            for name, tlelines in tles.items():
+                print("Updating %s" % (name))
+                # Create table if necessary
+                self.makeSatelliteTable(src, name)
+                # Insert into it
+                self.insertSatelliteTle(src, name, src_tr, tlelines[0], tlelines[1])
+                
         # Commit changes
         self.commit()
         
@@ -84,7 +99,10 @@ class TleDatabase:
             
         
     
-    #%% Helper functions
+    #%% Helper functions (generally don't need to call these externally)
+    def _makeTableName(self, src: str, name: str):
+        return "%s_%s" % (src, name)
+    
     def _makeTableColumns(self, fmt: dict):
         return ', '.join([' '.join(i) for i in fmt['cols']])
     
@@ -122,26 +140,43 @@ class TleDatabase:
         for srckey in data:
             tles = TleDatabase.parseTleData(data[srckey])
             # Merge into the collector
-            alltles = {**alltles, **tles}
+            alltles[srckey] = tles
             
         return alltles
         
         
     #%% Individual satellite tables
-    def makeSatelliteTable(self, name: str):
-        stmt = 'create table if not exists "%s"(%s)' % (name, self._makeTableColumns(self.satellite_table_fmt))
+    def makeSatelliteTable(self, src: str, name: str):
+        stmt = 'create table if not exists "%s"(%s)' % (
+            self._makeTableName(src, name), self._makeTableColumns(self.satellite_table_fmt))
         print(stmt)
         self.cur.execute(stmt)
         self.con.commit()
         
-    def insertSatelliteTle(self, name: str, time_retrieved: int, line1: str, line2: str):
-        stmt = 'insert or replace into "%s" values(%s)' % (name, self._makeQuestionMarks(self.satellite_table_fmt))
+    def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str):
+        stmt = 'insert or replace into "%s" values(%s)' % (
+            self._makeTableName(src, name), self._makeQuestionMarks(self.satellite_table_fmt))
         print(stmt)
         self.cur.execute(stmt, (time_retrieved, line1, line2))
+        
+    def getSatelliteTle(self, name: str, nearest_time_retrieved: int=None, src: str=None):
+        # Satellites can be repeated in different sources, so extract from given source if specified
+        if src is not None:
+            table = self._makeTableName(src, name)
+            stmt = 'select * from %s where time_retrieved'
+        
+        pass
     
         
-    
+#%%
 if __name__ == "__main__":
     d = TleDatabase("tles.db")
+    
+    #%% Typical use-case
     d.setSrcs('geo')
     d.update()
+    
+    #%% Debugging
+    # d.setSrcs('geo')
+    # data, time_retrieved = d.download()
+    # alltles = d.parseTleDataSrcs(data)
