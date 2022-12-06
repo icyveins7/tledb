@@ -22,15 +22,70 @@ class BulletinDatabase(Database):
     }
     
     #%% Table definitions
-    satellite_table_fmt = {
+    bulletins1980_table_fmt = {
         'cols': [
             ["time_retrieved", "INTEGER"],
-            ["line1", "TEXT"],
-            ["line2", "TEXT"]
+            ["year", "INTEGER"],
+            ["month", "INTEGER"],
+            ["day", "INTEGER"],
+            ["mjd", "REAL"],
+            ["ip_A_polar", "TEXT"],
+            ["A_pmx_arcsec", "REAL"],
+            ["A_pmx_err_arcsec", "REAL"],
+            ["A_pmy_arcsec", "REAL"],
+            ["A_pmy_err_arcsec", "REAL"],
+            ["ip_A_dut1", "TEXT"],
+            ["A_dut1_sec", "REAL"],
+            ["A_dut1_err_sec", "REAL"],
+            ["A_lod_msec", "REAL"],
+            ["A_lod_err_msec", "REAL"],
+            ["ip_A_nutation", "TEXT"],
+            ["A_dpsi_arcmsec", "REAL"],
+            ["A_dpsi_err_arcmsec", "REAL"],
+            ["A_deps_arcmsec", "REAL"],
+            ["A_deps_err_arcmsec", "REAL"],
+            ["B_pmx_arcsec", "REAL"],
+            ["B_pmy_arcsec", "REAL"],
+            ["B_dut1_sec", "REAL"],
+            ["B_dpsi_arcmsec", "REAL"],
+            ["B_deps_arcmsec", "REAL"]
         ],
         'conds': [
-            "UNIQUE(line1, line2)"
-        ]
+            
+        ] # Is there a short way to include all columns as UNIQUE?
+    }
+    
+    bulletins2000_table_fmt = {
+        'cols': [
+            ["time_retrieved", "INTEGER"],
+            ["year", "INTEGER"],
+            ["month", "INTEGER"],
+            ["day", "INTEGER"],
+            ["mjd", "REAL"],
+            ["ip_A_polar", "TEXT"],
+            ["A_pmx_arcsec", "REAL"],
+            ["A_pmx_err_arcsec", "REAL"],
+            ["A_pmy_arcsec", "REAL"],
+            ["A_pmy_err_arcsec", "REAL"],
+            ["ip_A_dut1", "TEXT"],
+            ["A_dut1_sec", "REAL"],
+            ["A_dut1_err_sec", "REAL"],
+            ["A_lod_msec", "REAL"],
+            ["A_lod_err_msec", "REAL"],
+            ["ip_A_nutation", "TEXT"],
+            ["A_dX_arcmsec", "REAL"],
+            ["A_dX_err_arcmsec", "REAL"],
+            ["A_dY_arcmsec", "REAL"],
+            ["A_dY_err_arcmsec", "REAL"],
+            ["B_pmx_arcsec", "REAL"],
+            ["B_pmy_arcsec", "REAL"],
+            ["B_dut1_sec", "REAL"],
+            ["B_dX_arcmsec", "REAL"],
+            ["B_dY_arcmsec", "REAL"]
+        ],
+        'conds': [
+            
+        ] # Is there a short way to include all columns as UNIQUE?
     }
     
     #%% Constructor
