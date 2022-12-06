@@ -7,6 +7,7 @@ Created on Mon Dec  5 17:30:22 2022
 
 import requests
 import datetime as dt
+from hashlib import blake2s
 
 from genericdb import Database
 
@@ -48,10 +49,11 @@ class BulletinDatabase(Database):
             ["B_pmy_arcsec", "REAL"],
             ["B_dut1_sec", "REAL"],
             ["B_dpsi_arcmsec", "REAL"],
-            ["B_deps_arcmsec", "REAL"]
+            ["B_deps_arcmsec", "REAL"],
+            ["blake2b_64bit_checksum", "INTEGER"]
         ],
         'conds': [
-            
+            "UNIQUE(mjd, blake2b_64bit_checksum)"
         ] # Is there a short way to include all columns as UNIQUE?
     }
     
@@ -81,10 +83,11 @@ class BulletinDatabase(Database):
             ["B_pmy_arcsec", "REAL"],
             ["B_dut1_sec", "REAL"],
             ["B_dX_arcmsec", "REAL"],
-            ["B_dY_arcmsec", "REAL"]
+            ["B_dY_arcmsec", "REAL"],
+            ["blake2b_64bit_checksum", "INTEGER"]
         ],
         'conds': [
-            
+            "UNIQUE(mjd, blake2b_64bit_checksum)"
         ] # Is there a short way to include all columns as UNIQUE?
     }
     
@@ -152,8 +155,15 @@ class BulletinDatabase(Database):
     def insertIntoTable2000(self, src: str, bulletins: list):
         pass
         
+    #%% Hash functions used for comparisons
+    def _hashLine(self, line: str):
+        # We always strip for consistency
+        line = line.strip()
+        # Then hash into a short 64-bit sequence using blake2s
+        hashed = blake2s(line.encode('utf-8'), digest_size=8).digest()
         
-    
+        return hashed
+        
     #%% Parsing
     @staticmethod
     def parseBulletin(self, key: str, data: str):
@@ -222,6 +232,8 @@ class BulletinDatabase(Database):
                 B_dut1_sec = None
                 B_dpsi_arcmsec = None
                 B_deps_arcmsec = None
+                
+            # TODO: include hashes
                 
             # We append as list of tuples, for ease of inserts later
             bulletins.append(
