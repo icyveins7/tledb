@@ -41,6 +41,20 @@ class BulletinDatabase(Database):
         
     
     #%% Common use-case methods
+    def update(self):
+        # Download
+        data, time_retrieved = self.download()
+        # Loop over the sources
+        for src, raw in data.items():
+            # Parse it into rows with typing
+            bulletins = self.parseBulletins(src, raw)
+            # Create the table if necessary
+            
+            
+            
+        # Commit changes
+        self.commit()
+    
     def setSrcs(self, srckeys: list):
         if isinstance(srckeys, str):
             srckeys = [srckeys] # Make it into a list for them
@@ -64,10 +78,41 @@ class BulletinDatabase(Database):
         
         return data, time_retrieved
         
+    #%% Table handling
+    def makeTable(self, src: str):
+        pass
+    
+    def makeTable1980(self, src: str):
+        pass
+    
+    def makeTable2000(self, src: str):
+        pass
+    
+    def insertIntoTable(self, src: str, bulletins: list):
+        pass
+    
+    def insertIntoTable1980(self, src: str, bulletins: list):
+        pass
+    
+    def insertIntoTable2000(self, src: str, bulletins: list):
+        pass
+        
+        
+    
     #%% Parsing
     @staticmethod
+    def parseBulletin(self, key: str, data: str):
+        if '1980' in key:
+            return self.parseBulletins1980(data)
+        elif '2000' in key:
+            return self.parseBulletins2000(data)
+        else:
+            raise KeyError("Key was invalid. No appropraite parse found.")
+    
+    
+    @staticmethod
     def parseBulletins1980(self, data: str):
-        bulletins = dict()
+        bulletins = []
         # Split into lines
         data = data.split("\n")
         # Read each line according to https://maia.usno.navy.mil/ser7/readme.finals
@@ -76,15 +121,138 @@ class BulletinDatabase(Database):
             month = int(line[2:4])
             day = int(line[4:6])
             mjday = float(line[7:15])
-            # TODO: complete
+            
+            ip_A_polar = str(line[16])
+            A_pmx_arcsec = float(line[18:27])
+            A_pmx_err_arcsec = float(line[27:36])
+            A_pmy_arcsec = float(line[37:46])
+            A_pmy_err_arcsec = float(line[46:55])
+            
+            ip_A_dut1 = str(line[57])
+            A_dut1_sec = float(line[58:68])
+            A_dut1_err_sec = float(line[68:78])
+            
+            # From here onwards, the fields may be blank, in which case we save Nones
+            try:
+                A_lod_msec = float(line[79:86])
+                A_lod_err_msec = float(line[86:93])
+            except:
+                A_lod_msec = None
+                A_lod_err_msec = None
+            
+            # This is another group that appears together
+            try:
+                ip_A_nutation = str(line[95])
+                A_dpsi_arcmsec = float(line[97:106])
+                A_dpsi_err_arcmsec = float(line[106:115])
+                A_deps_arcmsec = float(line[116:125])
+                A_deps_err_arcmsec = float(line[125:134])
+            except:
+                ip_A_nutation = None
+                A_dpsi_arcmsec = None
+                A_dpsi_err_arcmsec = None
+                A_deps_arcmsec = None
+                A_deps_err_arcmsec = None
+                
+            # And the final group from bulletin B
+            try:
+                B_pmx_arcsec = float(line[134:144])
+                B_pmy_arcsec = float(line[144:154])
+                B_dut1_sec = float(line[154:165])
+                B_dpsi_arcmsec = float(line[165:175])
+                B_deps_arcmsec = float(line[175:185])
+            except:
+                B_pmx_arcsec = None
+                B_pmy_arcsec = None
+                B_dut1_sec = None
+                B_dpsi_arcmsec = None
+                B_deps_arcmsec = None
+                
+            # We append as list of tuples, for ease of inserts later
+            bulletins.append(
+                (year, month, day, mjday,
+                 ip_A_polar, A_pmx_arcsec, A_pmx_err_arcsec, A_pmy_arcsec, A_pmy_err_arcsec,
+                 ip_A_dut1, A_dut1_sec, A_dut1_err_sec,
+                 A_lod_msec, A_lod_err_msec,
+                 ip_A_nutation,
+                 A_dpsi_arcmsec, A_dpsi_err_arcmsec, A_deps_arcmsec, A_deps_err_arcmsec,
+                 B_pmx_arcsec, B_pmy_arcsec, B_dut1_sec, B_dpsi_arcmsec, B_deps_arcmsec)    
+            )
+            
+        return bulletins
         
+                
+                
     @staticmethod
     def parseBulletins2000(self, data: str):
-        bulletins = dict()
+        bulletins = []
         # Split into lines
         data = data.split("\n")
         # Read each line according to https://maia.usno.navy.mil/ser7/readme.finals2000A
-        
+        for line in data:
+            year = int(line[0:2])
+            month = int(line[2:4])
+            day = int(line[4:6])
+            mjday = float(line[7:15])
+            
+            ip_A_polar = str(line[16])
+            A_pmx_arcsec = float(line[18:27])
+            A_pmx_err_arcsec = float(line[27:36])
+            A_pmy_arcsec = float(line[37:46])
+            A_pmy_err_arcsec = float(line[46:55])
+            
+            ip_A_dut1 = str(line[57])
+            A_dut1_sec = float(line[58:68])
+            A_dut1_err_sec = float(line[68:78])
+            
+            # From here onwards, the fields may be blank, in which case we save Nones
+            try:
+                A_lod_msec = float(line[79:86])
+                A_lod_err_msec = float(line[86:93])
+            except:
+                A_lod_msec = None
+                A_lod_err_msec = None
+            
+            # This is another group that appears together
+            try:
+                ip_A_nutation = str(line[95])
+                A_dX_arcmsec = float(line[97:106]) # Here is where it differs from 1980
+                A_dX_err_arcmsec = float(line[106:115])
+                A_dY_arcmsec = float(line[116:125])
+                A_dY_err_arcmsec = float(line[125:134])
+            except:
+                ip_A_nutation = None
+                A_dX_arcmsec = None
+                A_dX_err_arcmsec = None
+                A_dY_arcmsec = None
+                A_dY_err_arcmsec = None
+                
+            # And the final group from bulletin B
+            try:
+                B_pmx_arcsec = float(line[134:144])
+                B_pmy_arcsec = float(line[144:154])
+                B_dut1_sec = float(line[154:165])
+                B_dX_arcmsec = float(line[165:175]) # This also differs from 1980
+                B_dY_arcmsec = float(line[175:185])
+            except:
+                B_pmx_arcsec = None
+                B_pmy_arcsec = None
+                B_dut1_sec = None
+                B_dX_arcmsec = None
+                B_dY_arcmsec = None
+                
+            # We append as list of tuples, for ease of inserts later
+            bulletins.append(
+                (year, month, day, mjday,
+                 ip_A_polar, A_pmx_arcsec, A_pmx_err_arcsec, A_pmy_arcsec, A_pmy_err_arcsec,
+                 ip_A_dut1, A_dut1_sec, A_dut1_err_sec,
+                 A_lod_msec, A_lod_err_msec,
+                 ip_A_nutation,
+                 A_dX_arcmsec, A_dX_err_arcmsec, A_dY_arcmsec, A_dY_err_arcmsec,
+                 B_pmx_arcsec, B_pmy_arcsec, B_dut1_sec, B_dX_arcmsec, B_dY_arcmsec)    
+            )
+            
+        return bulletins
         
     
     
