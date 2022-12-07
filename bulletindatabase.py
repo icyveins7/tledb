@@ -8,6 +8,7 @@ Created on Mon Dec  5 17:30:22 2022
 import requests
 import datetime as dt
 from hashlib import blake2s
+import sqlite3 as sq
 
 from genericdb import Database
 
@@ -97,6 +98,9 @@ class BulletinDatabase(Database):
         
         self.usedSrcs = None
         
+        # We enable Rows for this
+        self.con.row_factory = sq.Row
+        
     
     #%% Common use-case methods
     def update(self):
@@ -184,8 +188,11 @@ class BulletinDatabase(Database):
             self._makeQuestionMarks(self.bulletins1980_table_fmt))
         # print(stmt)
         # We use generator expression to stitch the time retrieved
-        self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
-        self.commit()
+        try:
+            self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
+            self.commit()
+        except sq.IntegrityError as e:
+            print("Skipping due to unique constraint failure.")
     
     def insertIntoTable2000(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
         stmt = "insert%s into %s values(%s)" % (
@@ -194,8 +201,55 @@ class BulletinDatabase(Database):
             self._makeQuestionMarks(self.bulletins2000_table_fmt))
         # print(stmt)
         # We use generator expression to stitch the time retrieved
-        self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
-        self.commit()
+        try:
+            self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
+            self.commit()
+        except sq.IntegrityError as e:
+            print("Skipping due to unique constraint failure.")
+            
+    ######### These getters are a bit useless by themselves, usually you would want to extract the latest values for each individual variable
+    def getBulletin1980(self, src: str, nearest_time_retrieved: int=None):
+        # Get at the current time if unspecified
+        nearest_time_retrieved = int(dt.datetime.utcnow().timestamp()) if nearest_time_retrieved is None else nearest_time_retrieved
+        
+        # Extract the entire row
+        stmt = "select * from %s where %s order by ABS(? - time_retrieved) limit 1" % (
+            src,
+            self._makeNotNullConditionals(self.bulletins1980_table_fmt['cols'][13:])) 
+        # This is an easy way to just select those that are not null, but depends on the definition and order of the format dictionary
+        # print(stmt)
+        self.execute(stmt, (nearest_time_retrieved,))
+        results = self.cur.fetchall()
+        return results
+    
+    def getBulletin2000(self, src: str, nearest_time_retrieved: int=None):
+        # Get at the current time if unspecified
+        nearest_time_retrieved = int(dt.datetime.utcnow().timestamp()) if nearest_time_retrieved is None else nearest_time_retrieved
+        
+        # Extract the entire row
+        stmt = "select * from %s where %s order by ABS(? - time_retrieved) limit 1" % (
+            src,
+            self._makeNotNullConditionals(self.bulletins2000_table_fmt['cols'][13:])) 
+        # This is an easy way to just select those that are not null, but depends on the definition and order of the format dictionary
+        # print(stmt)
+        self.execute(stmt, (nearest_time_retrieved,))
+        results = self.cur.fetchall()
+        return results
+    
+    def getTeme2EcefParams(self, src: str, year: int, mon: int, day: int):
+        # We require the following: dut1, lod, xp, yp
+        # They are only acquired from the 1980s, so let's ensure the src is viable
+        if '1980' not in src:
+            raise ValueError("Please select a 1980 src.")
+            
+        # Extract each variable individually, and always pick the latest time_retrieved where it's not null
+        # These 3 come together, and are always present
+        stmt = "select A_pmx_arcsec, A_pmy_arcsec, A_dut1_sec where year=? and mon=? and day=? ORDER BY time_retrieved DESC limit 1"
+        
+        # LOD comes separately and may not be present
+        stmt = "select A_lod_msec where A_lod_msec is not null ORDER BY time_retrieved DESC limit 1"
+        # TODO: complete
+        pass
         
     #%% Hash functions used for comparisons
     @staticmethod
@@ -385,9 +439,11 @@ class BulletinDatabase(Database):
 #%%
 if __name__ == "__main__":
     d = BulletinDatabase("bulletins.db")
-    d.setSrcs("dailyiau2000")
+    d.setSrcs(["dailyiau2000", "dailyiau1980"])
     # data, time_retrieved = d.download()
     # data = data['dailyiau2000']
     # bulletins = d.parseBulletins('dailyiau2000', data)
     
     data, time_retrieved = d.update()
+    
+    bulletin = d.getBulletin1980('dailyiau1980')
