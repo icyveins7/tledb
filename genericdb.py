@@ -40,3 +40,6 @@ class Database:
     
     def _makeQuestionMarks(self, fmt: dict):
         return ','.join(["?"] * len(fmt['cols']))
+    
+    def _makeNotNullConditionals(self, cols: dict):
+        return ' and '.join(("%s is not null" % (i[0]) for i in cols))
