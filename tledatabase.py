@@ -88,7 +88,7 @@ class TleDatabase(Database):
         '''
         
         stmt = 'select name from sqlite_master where type="table"'
-        self.cur.execute(stmt)
+        self.execute(stmt)
         results = [i[0] for i in self.cur.fetchall()]
         
         # Return a set of strings (may have had repeated satellites in different sources)
@@ -244,8 +244,8 @@ class TleDatabase(Database):
         stmt = 'create table if not exists "%s"(%s)' % (
             self._makeTableName(src, name), self._makeTableStatement(self.satellite_table_fmt))
         # print(stmt)
-        self.cur.execute(stmt)
-        self.con.commit()
+        self.execute(stmt)
+        self.commit()
         
     def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str, replace: bool=False):
         stmt = 'insert%s into "%s" values(%s)' % (
@@ -255,7 +255,7 @@ class TleDatabase(Database):
         # print(stmt)
         
         try:
-            self.cur.execute(stmt, (time_retrieved, line1, line2))
+            self.execute(stmt, (time_retrieved, line1, line2))
         except sq.IntegrityError as e:
             # print(e)
             print("Skipping insert because record already exists.")
@@ -268,20 +268,20 @@ class TleDatabase(Database):
         if src is not None:
             table = self._makeTableName(src, name)
             stmt = 'select * from "%s" where time_retrieved order by ABS(? - time_retrieved) limit 1' % (self._makeTableName(src, name))
-            self.cur.execute(stmt, (nearest_time_retrieved, ))
+            self.execute(stmt, (nearest_time_retrieved, ))
             results = self.cur.fetchone()
             
         else:
             # Search all tables that contain the name
             stmt = "select name from sqlite_master where name LIKE '%%%s%%' and type='table'" % (name) # Remember to escape the % signs
-            self.cur.execute(stmt)
+            self.execute(stmt)
             tables = [i[0] for i in self.cur.fetchall()] # Unpack the tuples
             
             # Pick the one that is closest
             results = []
             for table in tables:
                 stmt = 'select * from "%s" where time_retrieved order by ABS(? - time_retrieved) limit 1' % (table)
-                self.cur.execute(stmt, (nearest_time_retrieved, ))
+                self.execute(stmt, (nearest_time_retrieved, ))
                 results.append(self.cur.fetchone())
                 
             # Compute the ordering
