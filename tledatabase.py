@@ -253,6 +253,12 @@ class TleDatabase(Database):
         # print(stmt)
         self.cur.execute(stmt, (time_retrieved, line1, line2))
         
+        # # TODO:, instead of always replace, default to handling
+        # try:
+            
+        # except IntegrityError as e: # This is the unique constraint failing
+        #     pass
+        
     def getSatelliteTle(self, name: str, nearest_time_retrieved: int=None, src: str=None):
         # Get at the current time if unspecified
         nearest_time_retrieved = int(dt.datetime.utcnow().timestamp()) if nearest_time_retrieved is None else nearest_time_retrieved
