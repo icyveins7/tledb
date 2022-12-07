@@ -16,9 +16,14 @@ class Database:
         self.con = sq.connect(self.dbpath)
         self.cur = self.con.cursor()
         
-    def commit(self):
-        # Simple redirect for brevity
-        self.con.commit()
+        # We redirect a few calls for brevity
+        self.execute = self.cur.execute
+        self.executemany = self.cur.executemany
+        self.commit = self.con.commit
+        
+    # def commit(self):
+    #     # Simple redirect for brevity
+    #     self.con.commit()
         
     #%% Helper functions (generally don't need to call these externally)
     def _makeTableColumns(self, fmt: dict):

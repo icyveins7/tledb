@@ -247,17 +247,18 @@ class TleDatabase(Database):
         self.cur.execute(stmt)
         self.con.commit()
         
-    def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str):
-        stmt = 'insert or replace into "%s" values(%s)' % (
-            self._makeTableName(src, name), self._makeQuestionMarks(self.satellite_table_fmt))
+    def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str, replace: bool=False):
+        stmt = 'insert%s into "%s" values(%s)' % (
+            " or replace" if replace else "",
+            self._makeTableName(src, name),
+            self._makeQuestionMarks(self.satellite_table_fmt))
         # print(stmt)
-        self.cur.execute(stmt, (time_retrieved, line1, line2))
         
-        # # TODO:, instead of always replace, default to handling
-        # try:
-            
-        # except IntegrityError as e: # This is the unique constraint failing
-        #     pass
+        try:
+            self.cur.execute(stmt, (time_retrieved, line1, line2))
+        except sq.IntegrityError as e:
+            # print(e)
+            print("Skipping insert because record already exists.")
         
     def getSatelliteTle(self, name: str, nearest_time_retrieved: int=None, src: str=None):
         # Get at the current time if unspecified

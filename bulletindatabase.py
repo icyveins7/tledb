@@ -50,10 +50,10 @@ class BulletinDatabase(Database):
             ["B_dut1_sec", "REAL"],
             ["B_dpsi_arcmsec", "REAL"],
             ["B_deps_arcmsec", "REAL"],
-            ["blake2b_64bit_checksum", "INTEGER"]
+            ["blake2b_32bit_checksum", "INTEGER"]
         ],
         'conds': [
-            "UNIQUE(mjd, blake2b_64bit_checksum)"
+            "UNIQUE(mjd, blake2b_32bit_checksum)"
         ] # Is there a short way to include all columns as UNIQUE?
     }
     
@@ -84,10 +84,10 @@ class BulletinDatabase(Database):
             ["B_dut1_sec", "REAL"],
             ["B_dX_arcmsec", "REAL"],
             ["B_dY_arcmsec", "REAL"],
-            ["blake2b_64bit_checksum", "INTEGER"]
+            ["blake2b_32bit_checksum", "INTEGER"]
         ],
         'conds': [
-            "UNIQUE(mjd, blake2b_64bit_checksum)"
+            "UNIQUE(mjd, blake2b_32bit_checksum)"
         ] # Is there a short way to include all columns as UNIQUE?
     }
     
@@ -107,11 +107,15 @@ class BulletinDatabase(Database):
             # Parse it into rows with typing
             bulletins = self.parseBulletins(src, raw)
             # Create the table if necessary
-            
-            
+            self.makeTable(src)
+            # Insert the bulletins
+            self.insertIntoTable(src, bulletins, time_retrieved[src])
             
         # Commit changes
         self.commit()
+        
+        # Return for debugging purposes
+        return data, time_retrieved 
     
     def setSrcs(self, srckeys: list):
         if isinstance(srckeys, str):
@@ -138,50 +142,95 @@ class BulletinDatabase(Database):
         
     #%% Table handling
     def makeTable(self, src: str):
-        pass
+        if '1980' in src:
+            self.makeTable1980(src)
+        elif '2000' in src:
+            self.makeTable2000(src)
+        else:
+            raise ValueError("Key was invalid. No appropriate table found.")
+            
     
     def makeTable1980(self, src: str):
-        pass
+        stmt = "create table if not exists %s(%s)" % (
+            src,
+            self._makeTableStatement(self.bulletins1980_table_fmt))
+        # print(stmt)
+        
+        self.execute(stmt)
+        self.commit()
+        
     
     def makeTable2000(self, src: str):
-        pass
+        stmt = "create table if not exists %s(%s)" % (
+            src,
+            self._makeTableStatement(self.bulletins2000_table_fmt))
+        # print(stmt)
+        
+        self.execute(stmt)
+        self.commit()
     
-    def insertIntoTable(self, src: str, bulletins: list):
-        pass
+    def insertIntoTable(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
+        if '1980' in src:
+            self.insertIntoTable1980(src, bulletins, time_retrieved, replace)
+        elif '2000' in src:
+            self.insertIntoTable2000(src, bulletins, time_retrieved, replace)
+        else:
+            raise ValueError("Key was invalid. No appropriate table found.")
     
-    def insertIntoTable1980(self, src: str, bulletins: list):
-        pass
+    def insertIntoTable1980(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
+        stmt = "insert%s into %s values(%s)" % (
+            " or replace" if replace else "",
+            src,
+            self._makeQuestionMarks(self.bulletins1980_table_fmt))
+        # print(stmt)
+        # We use generator expression to stitch the time retrieved
+        self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
+        self.commit()
     
-    def insertIntoTable2000(self, src: str, bulletins: list):
-        pass
+    def insertIntoTable2000(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
+        stmt = "insert%s into %s values(%s)" % (
+            " or replace" if replace else "",
+            src,
+            self._makeQuestionMarks(self.bulletins2000_table_fmt))
+        # print(stmt)
+        # We use generator expression to stitch the time retrieved
+        self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
+        self.commit()
         
     #%% Hash functions used for comparisons
-    def _hashLine(self, line: str):
+    @staticmethod
+    def _hashLine(line: str):
         # We always strip for consistency
         line = line.strip()
-        # Then hash into a short 64-bit sequence using blake2s
-        hashed = blake2s(line.encode('utf-8'), digest_size=8).digest()
+        # Then hash into a short 32-bit sequence using blake2s
+        # Note that we use a short bit sequence so that sqlite can convert it from python integers
+        hashed = blake2s(line.encode('utf-8'), digest_size=7).digest()
+        # Save as integer
+        hashed = int.from_bytes(hashed, 'big')
         
         return hashed
         
     #%% Parsing
     @staticmethod
-    def parseBulletin(self, key: str, data: str):
+    def parseBulletins(key: str, data: str):
         if '1980' in key:
-            return self.parseBulletins1980(data)
+            return BulletinDatabase.parseBulletins1980(data)
         elif '2000' in key:
-            return self.parseBulletins2000(data)
+            return BulletinDatabase.parseBulletins2000(data)
         else:
             raise KeyError("Key was invalid. No appropraite parse found.")
     
     
     @staticmethod
-    def parseBulletins1980(self, data: str):
+    def parseBulletins1980(data: str):
         bulletins = []
         # Split into lines
         data = data.split("\n")
         # Read each line according to https://maia.usno.navy.mil/ser7/readme.finals
         for line in data:
+            if len(line) < 79:
+                continue
+            
             year = int(line[0:2])
             month = int(line[2:4])
             day = int(line[4:6])
@@ -233,7 +282,8 @@ class BulletinDatabase(Database):
                 B_dpsi_arcmsec = None
                 B_deps_arcmsec = None
                 
-            # TODO: include hashes
+            # Hash it to easily test uniqueness
+            hashed = BulletinDatabase._hashLine(line)
                 
             # We append as list of tuples, for ease of inserts later
             bulletins.append(
@@ -243,7 +293,8 @@ class BulletinDatabase(Database):
                  A_lod_msec, A_lod_err_msec,
                  ip_A_nutation,
                  A_dpsi_arcmsec, A_dpsi_err_arcmsec, A_deps_arcmsec, A_deps_err_arcmsec,
-                 B_pmx_arcsec, B_pmy_arcsec, B_dut1_sec, B_dpsi_arcmsec, B_deps_arcmsec)    
+                 B_pmx_arcsec, B_pmy_arcsec, B_dut1_sec, B_dpsi_arcmsec, B_deps_arcmsec,
+                 hashed)    
             )
             
         return bulletins
@@ -251,12 +302,15 @@ class BulletinDatabase(Database):
                 
                 
     @staticmethod
-    def parseBulletins2000(self, data: str):
+    def parseBulletins2000(data: str):
         bulletins = []
         # Split into lines
         data = data.split("\n")
         # Read each line according to https://maia.usno.navy.mil/ser7/readme.finals2000A
         for line in data:
+            if len(line) < 79:
+                continue
+            
             year = int(line[0:2])
             month = int(line[2:4])
             day = int(line[4:6])
@@ -308,6 +362,9 @@ class BulletinDatabase(Database):
                 B_dX_arcmsec = None
                 B_dY_arcmsec = None
                 
+            # Hash it to easily test uniqueness
+            hashed = BulletinDatabase._hashLine(line)
+                
             # We append as list of tuples, for ease of inserts later
             bulletins.append(
                 (year, month, day, mjday,
@@ -316,7 +373,8 @@ class BulletinDatabase(Database):
                  A_lod_msec, A_lod_err_msec,
                  ip_A_nutation,
                  A_dX_arcmsec, A_dX_err_arcmsec, A_dY_arcmsec, A_dY_err_arcmsec,
-                 B_pmx_arcsec, B_pmy_arcsec, B_dut1_sec, B_dX_arcmsec, B_dY_arcmsec)    
+                 B_pmx_arcsec, B_pmy_arcsec, B_dut1_sec, B_dX_arcmsec, B_dY_arcmsec,
+                 hashed)    
             )
             
         return bulletins
@@ -328,4 +386,8 @@ class BulletinDatabase(Database):
 if __name__ == "__main__":
     d = BulletinDatabase("bulletins.db")
     d.setSrcs("dailyiau2000")
-    data, time_retrieved = d.download()
+    # data, time_retrieved = d.download()
+    # data = data['dailyiau2000']
+    # bulletins = d.parseBulletins('dailyiau2000', data)
+    
+    data, time_retrieved = d.update()
