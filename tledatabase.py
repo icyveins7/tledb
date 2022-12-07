@@ -267,7 +267,7 @@ class TleDatabase(Database):
         # Satellites can be repeated in different sources, so extract from given source if specified
         if src is not None:
             table = self._makeTableName(src, name)
-            stmt = 'select * from "%s" where time_retrieved order by ABS(? - time_retrieved) limit 1' % (self._makeTableName(src, name))
+            stmt = 'select * from "%s" order by ABS(? - time_retrieved) limit 1' % (self._makeTableName(src, name))
             self.execute(stmt, (nearest_time_retrieved, ))
             results = self.cur.fetchone()
             
@@ -280,7 +280,7 @@ class TleDatabase(Database):
             # Pick the one that is closest
             results = []
             for table in tables:
-                stmt = 'select * from "%s" where time_retrieved order by ABS(? - time_retrieved) limit 1' % (table)
+                stmt = 'select * from "%s" order by ABS(? - time_retrieved) limit 1' % (table)
                 self.execute(stmt, (nearest_time_retrieved, ))
                 results.append(self.cur.fetchone())
                 
