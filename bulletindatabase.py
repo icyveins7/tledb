@@ -236,7 +236,7 @@ class BulletinDatabase(Database):
         results = self.cur.fetchall()
         return results
     
-    def getTeme2EcefParams(self, src: str, year: int, mon: int, day: int):
+    def getTeme2EcefParams(self, src: str, year: int, month: int, day: int):
         # We require the following: dut1, lod, xp, yp
         # They are only acquired from the 1980s, so let's ensure the src is viable
         if '1980' not in src:
@@ -244,12 +244,28 @@ class BulletinDatabase(Database):
             
         # Extract each variable individually, and always pick the latest time_retrieved where it's not null
         # These 3 come together, and are always present
-        stmt = "select A_pmx_arcsec, A_pmy_arcsec, A_dut1_sec where year=? and mon=? and day=? ORDER BY time_retrieved DESC limit 1"
+        stmt = "select time_retrieved, A_pmx_arcsec, A_pmy_arcsec, A_dut1_sec from %s where year=? and month=? and day=? ORDER BY time_retrieved DESC limit 1" % src
+        self.execute(stmt, (year, month, day))
+        try:
+            tr0, pmx_arcsec, pmy_arcsec, dut1_sec = self.cur.fetchone()
+        except TypeError as e:
+            print("No results; make sure year/month/day exists. %s" % str(e))
+            raise(e)
         
         # LOD comes separately and may not be present
-        stmt = "select A_lod_msec where A_lod_msec is not null ORDER BY time_retrieved DESC limit 1"
+        # So first we try to extract if any exist
+        stmt = "select time_retrieved, A_lod_msec from %s where year=? and month=? and day=? and A_lod_msec is not null ORDER BY time_retrieved DESC limit 1" % src
+        self.execute(stmt, (year, month, day))
+        try:
+            tr1, lod_msec = self.cur.fetchone()
+        except TypeError as e:
+            print("No results for LOD at the desired date. Attempting to get nearest result.")
+            stmt = "select time_retrieved, A_lod_msec from %s where A_lod_msec is not null ORDER BY ABS(mjday-?) DESC, time_retrieved DESC limit 1" % src
+            self.execute(stmt, (mjday,)) # TODO: convert to mjday inputs
+            tr1, lod_msec = self.cur.fetchone()
+        
+        return pmx_arcsec, pmy_arcsec, dut1_sec, tr1, lod_msec
         # TODO: complete
-        pass
         
     #%% Hash functions used for comparisons
     @staticmethod
@@ -444,6 +460,9 @@ if __name__ == "__main__":
     # data = data['dailyiau2000']
     # bulletins = d.parseBulletins('dailyiau2000', data)
     
-    data, time_retrieved = d.update()
+    # data, time_retrieved = d.update()
     
-    bulletin = d.getBulletin1980('dailyiau1980')
+    # bulletin = d.getBulletin1980('dailyiau1980')
+    
+    #%% Test the extraction
+    pmx_arcsec, pmy_arcsec, dut1_sec = d.getTeme2EcefParams('dailyiau1980', 22, 12, 7)
