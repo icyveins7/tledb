@@ -233,7 +233,7 @@ class BulletinDatabase(Database):
         # This is an easy way to just select those that are not null, but depends on the definition and order of the format dictionary
         # print(stmt)
         self.execute(stmt, (nearest_time_retrieved,))
-        results = self.cur.fetchall()
+        results = self.fetchall()
         return results
     
     def getPolMotionDut1(self, src: str, year: int, month: int, day: int):
@@ -242,7 +242,7 @@ class BulletinDatabase(Database):
         stmt = "select time_retrieved, A_pmx_arcsec, A_pmy_arcsec, A_dut1_sec from %s where year=? and month=? and day=? ORDER BY time_retrieved DESC limit 1" % src
         self.execute(stmt, (year, month, day))
         try:
-            tr0, pmx_arcsec, pmy_arcsec, dut1_sec = self.cur.fetchone()
+            tr0, pmx_arcsec, pmy_arcsec, dut1_sec = self.fetchone()
             return tr0, pmx_arcsec, pmy_arcsec, dut1_sec
         except TypeError as e:
             raise TypeError("No results; make sure year/month/day exists. %s" % str(e))
@@ -250,16 +250,30 @@ class BulletinDatabase(Database):
     def getLod(self, src: str, mjday: float):
         # LOD may not be present, so the best case is to list in order of mjday (which is generally monotonically increasing)
         # and then find the nearest date which is not empty
-        stmt = "select time_retrieved, A_lod_msec from %s where A_lod_msec is not null ORDER BY ABS(mjday-?) DESC, time_retrieved DESC limit 1" % src
+        stmt = "select time_retrieved, mjd, A_lod_msec from %s where A_lod_msec is not null ORDER BY ABS(mjd-?) ASC, time_retrieved DESC limit 1" % src
+        self.execute(stmt, (mjday,))
         try:
-            tr0, lod_msec = self.cur.fetchone()
-            return tr0, lod_msec
+            tr0, mjd, lod_msec = self.fetchone()
+            return tr0, mjd, lod_msec
         except TypeError as e:
             raise TypeError("No results; maybe check mjday value? %s" % str(e))
+            
+    def getMjday(self, src: str, year: int, month: int, day: int):
+        # Use this if you wish to get the mjday for a calendar date
+        stmt = "select mjd from %s where year=? and month=? and day=? limit 1" % (src)
+        self.execute(stmt, (year, month, day))
+        try:
+            mjday, = self.fetchone()
+            return mjday
+        except TypeError as e:
+            raise TypeError("Could not find corresponding mjday. %s" % str(e))
         
     def getTeme2EcefParams(self, src: str, year: int, month: int, day: int):
-        # Probably combine the above two separate extractors in some coherent way..
-        pass
+        # Combine all the above extractors in one convenient method
+        mjday = self.getMjday(src, year, month, day)
+        tr_pol, pmx_arcsec, pmy_arcsec, dut1_sec = self.getPolMotionDut1(src, year, month, day)
+        tr_lod, mjd_actual, lod_msec = self.getLod(src, mjday)
+        return tr_pol, pmx_arcsec, pmy_arcsec, dut1_sec, tr_lod, mjd_actual, lod_msec
         
     #%% Hash functions used for comparisons
     @staticmethod
@@ -460,3 +474,8 @@ if __name__ == "__main__":
     
     #%% Test the extraction
     time_retrieved_pmdut, pmx_arcsec, pmy_arcsec, dut1_sec = d.getPolMotionDut1('dailyiau1980', 22, 12, 7)
+    mjday_target = d.getMjday('dailyiau1980', 22, 12, 7)
+    time_retrieved_lod, mjday_actual, lod_msec = d.getLod('dailyiau1980',59920.0)
+    
+    #%% Test convenient extraction
+    tr_pol, pmx_arcsec1, pmy_arcsec1, dut1_sec1, tr_lod, mjd_actual, lod_msec1 = d.getTeme2EcefParams('dailyiau1980', 22, 12, 7)
