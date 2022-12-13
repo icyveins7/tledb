@@ -20,10 +20,8 @@ class Database:
         self.execute = self.cur.execute
         self.executemany = self.cur.executemany
         self.commit = self.con.commit
-        
-    # def commit(self):
-    #     # Simple redirect for brevity
-    #     self.con.commit()
+        self.fetchone = self.cur.fetchone
+        self.fetchall = self.cur.fetchall
         
     #%% Helper functions (generally don't need to call these externally)
     def _makeTableColumns(self, fmt: dict):
