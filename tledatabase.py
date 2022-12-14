@@ -12,7 +12,8 @@ import re
 import datetime as dt
 import numpy as np
 
-from genericdb import Database
+from sew import Database
+# from genericdb import Database
 
 #%%
 class TleDatabase(Database):

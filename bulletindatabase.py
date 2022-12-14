@@ -10,7 +10,8 @@ import datetime as dt
 from hashlib import blake2s
 import sqlite3 as sq
 
-from genericdb import Database
+from sew import Database
+# from genericdb import Database
 
 #%%
 class BulletinDatabase(Database):

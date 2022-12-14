@@ -7,23 +7,30 @@ Created on Mon Dec  5 17:23:06 2022
 
 import sqlite3 as sq
 
-#%% 
-# This is meant to be an interface to contain common helper functions, to be inherited by other classes.
-# Do not initialise this directly.
-class Database:
+#%% Basic container, the most barebones
+class SqliteContainer:
     def __init__(self, dbpath: str):
         self.dbpath = dbpath
-        self.con = sq.connect(self.dbpath)
+        self.con = sq.connect(dbpath)
         self.cur = self.con.cursor()
         
-        # We redirect a few calls for brevity
+#%% Mixin to redirect common sqlite methods for brevity in code later
+class CommonRedirectMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        self.close = self.con.close
         self.execute = self.cur.execute
         self.executemany = self.cur.executemany
         self.commit = self.con.commit
         self.fetchone = self.cur.fetchone
         self.fetchall = self.cur.fetchall
         
-    #%% Helper functions (generally don't need to call these externally)
+#%% Mixin that contains the helper methods for statement generation
+class StatementGeneratorMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
     def _makeTableColumns(self, fmt: dict):
         return ', '.join([' '.join(i) for i in fmt['cols']])
     
@@ -63,3 +70,14 @@ class Database:
                 self._makeQuestionMarks(fmt)
             )
         return stmt
+    
+
+#%% Inherited class of all the above
+class Database(CommonRedirectMixin, StatementGeneratorMixin, SqliteContainer):
+    def __init__(self, dbpath: str):
+        super().__init__(dbpath)
+
+    
+#%%
+if __name__ == "__main__":
+    d = Database(":memory:")
