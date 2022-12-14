@@ -41,3 +41,25 @@ class Database:
     
     def _makeNotNullConditionals(self, cols: dict):
         return ' and '.join(("%s is not null" % (i[0]) for i in cols))
+    
+    def _makeSelectStatement(self,
+                             tablename: str,
+                             columnNames: list,
+                             conditions: list=None):
+        columns = ','.join(columnNames) if isinstance(columnNames, list) else columnNames
+        conditions = [conditions] if isinstance(conditions, str) else conditions # Turn into a list if supplied as a single string
+        conditions = ' where ' + ' and '.join(conditions) if isinstance(conditions, list) else ''
+        stmt = "select %s from %s%s" % (
+                columns,
+                tablename,
+                conditions
+            )
+        return stmt
+    
+    def _makeInsertStatement(self, tablename: str, fmt: dict, orReplace: bool=False):
+        stmt = "insert%s into %s values(%s)" % (
+                " or replace" if orReplace else '',
+                tablename,
+                self._makeQuestionMarks(fmt)
+            )
+        return stmt
