@@ -241,9 +241,11 @@ class TleDatabase(Database):
         
     #%% Individual satellite tables
     def makeSatelliteTable(self, src: str, name: str):
-        stmt = 'create table if not exists "%s"(%s)' % (
-            self._makeTableName(src, name), self._makeTableStatement(self.satellite_table_fmt))
-        # print(stmt)
+        # stmt = 'create table if not exists "%s"(%s)' % (
+        #     self._makeTableName(src, name), self._makeTableStatement(self.satellite_table_fmt))
+        
+        stmt = self._makeTableStatement(self.satellite_table_fmt, self._makeTableName(src, name), True, True)
+        print(stmt)
         self.execute(stmt)
         self.commit()
         
