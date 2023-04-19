@@ -12,10 +12,10 @@ import re
 import datetime as dt
 import numpy as np
 
-from sew.sew import Database
+import sew
 
 #%%
-class TleDatabase(Database):
+class TleDatabase(sew.Database):
     '''
     Represents a database of TLEs, ordered by sources (which is a key-value dictionary) and satellite names.
     '''
@@ -52,7 +52,7 @@ class TleDatabase(Database):
             File path of the database.
         '''
         super().__init__(dbpath)
-        self.usedSrcs = None
+        self._usedSrcs = None
         
     #%% Discovery methods
     def getAvailableSrcs(self):
@@ -160,6 +160,12 @@ class TleDatabase(Database):
         # Commit changes
         self.commit()
         
+    @property
+    def usedSrcs(self):
+        '''
+        Returns a list of the sources that have been activated.
+        '''
+        return self._usedSrcs
     
     def setSrcs(self, srckeys: list):
         '''
@@ -174,7 +180,7 @@ class TleDatabase(Database):
         if isinstance(srckeys, str):
             srckeys = [srckeys] # Make it into a list for them
         
-        self.usedSrcs = {key: self.srcs[key] for key in srckeys}
+        self._usedSrcs = {key: self.srcs[key] for key in srckeys}
         
     def download(self):
         '''
@@ -192,12 +198,12 @@ class TleDatabase(Database):
         time_retrieved : dict
             This dictionary contains the time of download with keys matching the activated sources.
         '''
-        if self.usedSrcs is None:
+        if self._usedSrcs is None:
             raise ValueError("No sources are activated. Please call setSrcs().")
         
         data = dict()
         time_retrieved = dict()
-        for key, link in self.usedSrcs.items():
+        for key, link in self._usedSrcs.items():
             try:
                 r = requests.get(link)
                 data[key] = r.text
@@ -209,7 +215,7 @@ class TleDatabase(Database):
         return data, time_retrieved
             
     #%% Helper methods
-    def _makeTableName(self, src: str, name: str):
+    def _makeSatelliteTableName(self, src: str, name: str):
         return "%s_%s" % (src, name)
     
     #%% TLE parsing
@@ -241,26 +247,19 @@ class TleDatabase(Database):
         
     #%% Individual satellite tables
     def makeSatelliteTable(self, src: str, name: str):
-        # stmt = 'create table if not exists "%s"(%s)' % (
-        #     self._makeTableName(src, name), self._makeTableStatement(self.satellite_table_fmt))
-        
-        stmt = self._makeTableStatement(self.satellite_table_fmt, self._makeTableName(src, name), True, True)
-        print(stmt)
-        self.execute(stmt)
-        self.commit()
+        self.createTable(
+            self.satellite_table_fmt, 
+            self._makeSatelliteTableName(src, name), 
+            ifNotExists=True, encloseTableName=True, commitNow=True)
+        self.reloadTables()
         
     def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str, replace: bool=False):
-        stmt = 'insert%s into "%s" values(%s)' % (
-            " or replace" if replace else "",
-            self._makeTableName(src, name),
-            self._makeQuestionMarks(self.satellite_table_fmt))
-        # print(stmt)
-        
+        table = self._tables[self._makeSatelliteTableName(src, name)]
+
         try:
-            self.execute(stmt, (time_retrieved, line1, line2))
+            table.insertOne(time_retrieved, line1, line2, orReplace=replace, commitNow=True)
         except sq.IntegrityError as e:
-            # print(e)
-            print("Skipping insert because record already exists.")
+            print("Skipping insert for %s because record already exists." % (table._tbl))
         
     def getSatelliteTle(self, name: str, nearest_time_retrieved: int=None, src: str=None):
         # Get at the current time if unspecified
@@ -268,20 +267,20 @@ class TleDatabase(Database):
         
         # Satellites can be repeated in different sources, so extract from given source if specified
         if src is not None:
-            table = self._makeTableName(src, name)
-            stmt = 'select * from "%s" order by ABS(? - time_retrieved) limit 1' % (self._makeTableName(src, name))
+            table = self._makeSatelliteTableName(src, name)
+            # No easy way to select directly, so generate the custom statement
+            stmt = 'select * from "%s" order by ABS(? - time_retrieved) limit 1' % (table)
             self.execute(stmt, (nearest_time_retrieved, ))
-            results = self.cur.fetchone()
+            results = self.fetchone()
             
         else:
             # Search all tables that contain the name
-            stmt = "select name from sqlite_master where name LIKE '%%%s%%' and type='table'" % (name) # Remember to escape the % signs
-            self.execute(stmt)
-            tables = [i[0] for i in self.cur.fetchall()] # Unpack the tuples
-            
+            tables = [i for i in self._tables if name in i]
+
             # Pick the one that is closest
             results = []
             for table in tables:
+                # No easy way to select directly, so generate the custom statement
                 stmt = 'select * from "%s" order by ABS(? - time_retrieved) limit 1' % (table)
                 self.execute(stmt, (nearest_time_retrieved, ))
                 results.append(self.cur.fetchone())
@@ -306,8 +305,5 @@ if __name__ == "__main__":
     d.update()
     
     results, table = d.getSatelliteTle('MUOS-3')
-    
-    #%% Debugging
-    # d.setSrcs('geo')
-    # data, time_retrieved = d.download()
-    # alltles = d.parseTleDataSrcs(data)
+    print(dict(results))
+    print(table)
