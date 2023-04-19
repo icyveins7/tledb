@@ -10,10 +10,10 @@ import datetime as dt
 from hashlib import blake2s
 import sqlite3 as sq
 
-from sew.sew import Database
+import sew
 
 #%%
-class BulletinDatabase(Database):
+class BulletinDatabase(sew.Database):
     srcs = {
         "dailyiau2000": "https://datacenter.iers.org/data/latestVersion/finals.daily.iau2000.txt",
         "dailyiau1980": "https://datacenter.iers.org/data/latestVersion/finals.daily.iau1980.txt",
@@ -111,7 +111,7 @@ class BulletinDatabase(Database):
             # Parse it into rows with typing
             bulletins = self.parseBulletins(src, raw)
             # Create the table if necessary
-            self.makeTable(src)
+            self.makeBulletinTable(src)
             # Insert the bulletins
             self.insertIntoTable(src, bulletins, time_retrieved[src])
             
@@ -145,67 +145,109 @@ class BulletinDatabase(Database):
         return data, time_retrieved
         
     #%% Table handling
-    def makeTable(self, src: str):
+    def makeBulletinTable(self, src: str):
         if '1980' in src:
-            self.makeTable1980(src)
+            self.createTable(
+                self.bulletins1980_table_fmt,
+                src,
+                ifNotExists=True, encloseTableName=True,
+                commitNow=True
+            )
+            # self.makeTable1980(src)
         elif '2000' in src:
-            self.makeTable2000(src)
+            self.createTable(
+                self.bulletins2000_table_fmt,
+                src,
+                ifNotExists=True, encloseTableName=True,
+                commitNow=True
+            )
+            # self.makeTable2000(src)
         else:
             raise ValueError("Key was invalid. No appropriate table found.")
+        
+        self.reloadTables()
             
     
-    def makeTable1980(self, src: str):
-        stmt = "create table if not exists %s(%s)" % (
-            src,
-            self._makeTableStatement(self.bulletins1980_table_fmt))
-        # print(stmt)
+    # def makeTable1980(self, src: str):
+    #     stmt = "create table if not exists %s(%s)" % (
+    #         src,
+    #         self._makeTableStatement(self.bulletins1980_table_fmt))
+    #     # print(stmt)
         
-        self.execute(stmt)
-        self.commit()
+    #     self.execute(stmt)
+    #     self.commit()
         
     
-    def makeTable2000(self, src: str):
-        stmt = "create table if not exists %s(%s)" % (
-            src,
-            self._makeTableStatement(self.bulletins2000_table_fmt))
-        # print(stmt)
+    # def makeTable2000(self, src: str):
+    #     stmt = "create table if not exists %s(%s)" % (
+    #         src,
+    #         self._makeTableStatement(self.bulletins2000_table_fmt))
+    #     # print(stmt)
         
-        self.execute(stmt)
-        self.commit()
+    #     self.execute(stmt)
+    #     self.commit()
     
     def insertIntoTable(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
-        if '1980' in src:
-            self.insertIntoTable1980(src, bulletins, time_retrieved, replace)
-        elif '2000' in src:
-            self.insertIntoTable2000(src, bulletins, time_retrieved, replace)
-        else:
-            raise ValueError("Key was invalid. No appropriate table found.")
-    
-    def insertIntoTable1980(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
-        stmt = "insert%s into %s values(%s)" % (
-            " or replace" if replace else "",
-            src,
-            self._makeQuestionMarks(self.bulletins1980_table_fmt))
-        # print(stmt)
-        # We use generator expression to stitch the time retrieved
+        # We can directly insert, since the table knows the format in sew now
         try:
-            self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
-            self.commit()
+            self._tables[src].insertMany(
+                ((time_retrieved, *bulletin) for bulletin in bulletins),
+                orReplace=False,
+                commitNow=True,
+                encloseTableName=True)
         except sq.IntegrityError as e:
             print("Skipping due to unique constraint failure.")
+        
+        # if '1980' in src:
+        #     # self.insertIntoTable1980(src, bulletins, time_retrieved, replace)
+        # elif '2000' in src:
+        #     # self.insertIntoTable2000(src, bulletins, time_retrieved, replace)
+        # else:
+        #     raise ValueError("Key was invalid. No appropriate table found.")
     
-    def insertIntoTable2000(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
-        stmt = "insert%s into %s values(%s)" % (
-            " or replace" if replace else "",
-            src,
-            self._makeQuestionMarks(self.bulletins2000_table_fmt))
-        # print(stmt)
+    # def insertIntoTable1980(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
+    #     try:
+    #         self._tables[src].insertMany(
+    #             ((time_retrieved, *bulletin) for bulletin in bulletins),
+    #             orReplace=False,
+    #             commitNow=True,
+    #             encloseTableName=True)
+    #     except sq.IntegrityError as e:
+    #         print("Skipping due to unique constraint failure.")
+
+        # stmt = "insert%s into %s values(%s)" % (
+        #     " or replace" if replace else "",
+        #     src,
+        #     self._makeQuestionMarks(self.bulletins1980_table_fmt))
+        # # print(stmt)
         # We use generator expression to stitch the time retrieved
-        try:
-            self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
-            self.commit()
-        except sq.IntegrityError as e:
-            print("Skipping due to unique constraint failure.")
+        # try:
+        #     self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
+        #     self.commit()
+        # except sq.IntegrityError as e:
+        #     print("Skipping due to unique constraint failure.")
+    
+    # def insertIntoTable2000(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
+    #     try:
+    #         self._tables[src].insertMany(
+    #             ((time_retrieved, *bulletin) for bulletin in bulletins),
+    #             orReplace=False,
+    #             commitNow=True,
+    #             encloseTableName=True)
+    #     except sq.IntegrityError as e:
+    #         print("Skipping due to unique constraint failure.")
+        
+        # stmt = "insert%s into %s values(%s)" % (
+        #     " or replace" if replace else "",
+        #     src,
+        #     self._makeQuestionMarks(self.bulletins2000_table_fmt))
+        # # print(stmt)
+        # # We use generator expression to stitch the time retrieved
+        # try:
+        #     self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
+        #     self.commit()
+        # except sq.IntegrityError as e:
+        #     print("Skipping due to unique constraint failure.")
             
     ######### These getters are a bit useless by themselves, usually you would want to extract the latest values for each individual variable
     def getBulletin1980(self, src: str, nearest_time_retrieved: int=None):
@@ -377,8 +419,6 @@ class BulletinDatabase(Database):
             
         return bulletins
         
-                
-                
     @staticmethod
     def parseBulletins2000(data: str):
         bulletins = []
@@ -468,14 +508,21 @@ if __name__ == "__main__":
     # data = data['dailyiau2000']
     # bulletins = d.parseBulletins('dailyiau2000', data)
     
-    # data, time_retrieved = d.update()
+    data, time_retrieved = d.update()
     
     # bulletin = d.getBulletin1980('dailyiau1980')
     
     #%% Test the extraction
-    time_retrieved_pmdut, pmx_arcsec, pmy_arcsec, dut1_sec = d.getPolMotionDut1('dailyiau1980', 22, 12, 7)
-    mjday_target = d.getMjday('dailyiau1980', 22, 12, 7)
-    time_retrieved_lod, mjday_actual, lod_msec = d.getLod('dailyiau1980',59920.0)
+    import datetime as dt
+    now = dt.datetime.now()
+
+    time_retrieved_pmdut, pmx_arcsec, pmy_arcsec, dut1_sec = d.getPolMotionDut1('dailyiau1980', now.year % 100, now.month, now.day)
+    print(time_retrieved_pmdut, pmx_arcsec, pmy_arcsec, dut1_sec)
+    mjday_target = d.getMjday('dailyiau1980', now.year % 100, now.month, now.day)
+    print(mjday_target)
+    time_retrieved_lod, mjday_actual, lod_msec = d.getLod('dailyiau1980', mjday_target)
+    print(time_retrieved_lod, mjday_actual, lod_msec)
     
     #%% Test convenient extraction
-    tr_pol, pmx_arcsec1, pmy_arcsec1, dut1_sec1, tr_lod, mjd_actual, lod_msec1 = d.getTeme2EcefParams('dailyiau1980', 22, 12, 7)
+    tr_pol, pmx_arcsec1, pmy_arcsec1, dut1_sec1, tr_lod, mjd_actual, lod_msec1 = d.getTeme2EcefParams('dailyiau1980', now.year % 100, now.month, now.day)
+    print(tr_pol, pmx_arcsec1, pmy_arcsec1, dut1_sec1, tr_lod, mjd_actual, lod_msec1)
