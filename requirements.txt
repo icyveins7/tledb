@@ -6,6 +6,7 @@ h11==0.14.0
 httpcore==0.16.3
 httpx==0.23.3
 idna==3.4
+numpy==1.24.2
 python-telegram-bot==20.2
 pytz==2023.3
 pytz-deprecation-shim==0.1.0.post0
