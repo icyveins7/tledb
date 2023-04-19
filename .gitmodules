@@ -1,0 +1,3 @@
+[submodule "common_bot_interfaces"]
+	path = common_bot_interfaces
+	url = https://github.com/icyveins7/common_bot_interfaces
