@@ -91,19 +91,38 @@ class BulletinDatabase(sew.Database):
             "UNIQUE(mjd, blake2b_32bit_checksum)"
         ] # Is there a short way to include all columns as UNIQUE?
     }
+
+    srcfmts = {
+        "dailyiau2000": bulletins2000_table_fmt,
+        "dailyiau1980": bulletins1980_table_fmt,
+        "alliau2000": bulletins2000_table_fmt,
+        "alliau1980": bulletins1980_table_fmt,
+        "dataiau2000": bulletins2000_table_fmt,
+        "dataiau1980": bulletins1980_table_fmt
+    }
     
     #%% Constructor
     def __init__(self, dbpath: str):
         super().__init__(dbpath)
         
-        self.usedSrcs = None
+        self._usedSrcs = None
         
         # We enable Rows for this
         self.con.row_factory = sq.Row
         
-    
     #%% Common use-case methods
     def update(self):
+        """
+        Downloads the activated sources, parses them
+        and then stores them into the database.
+
+        Returns
+        -------
+        data : dict
+            Raw data (value) for each source (key).
+        time_retrieved : dict
+            Time retrieved (value) for each source (key).
+        """
         # Download
         data, time_retrieved = self.download()
         # Loop over the sources
@@ -121,19 +140,30 @@ class BulletinDatabase(sew.Database):
         # Return for debugging purposes
         return data, time_retrieved 
     
+    @property
+    def usedSrcs(self):
+        if self._usedSrcs is None:
+            raise ValueError("No sources are activated. Please call setSrcs().")
+        
+        return self._usedSrcs
+
     def setSrcs(self, srckeys: list):
         if isinstance(srckeys, str):
             srckeys = [srckeys] # Make it into a list for them
         
-        self.usedSrcs = {key: self.srcs[key] for key in srckeys}
+        self._usedSrcs = {key: self.srcs[key] for key in srckeys}
         
     def download(self):
-        if self.usedSrcs is None:
+        """
+        Downloads the activated sources and returns the data and the time retrieved.
+        Usually not required, as you should just call update() directly.
+        """
+        if self._usedSrcs is None:
             raise ValueError("No sources are activated. Please call setSrcs().")
         
         data = dict()
         time_retrieved = dict()
-        for key, link in self.usedSrcs.items():
+        for key, link in self._usedSrcs.items():
             try:
                 r = requests.get(link)
                 data[key] = r.text
@@ -146,46 +176,14 @@ class BulletinDatabase(sew.Database):
         
     #%% Table handling
     def makeBulletinTable(self, src: str):
-        if '1980' in src:
-            self.createTable(
-                self.bulletins1980_table_fmt,
-                src,
-                ifNotExists=True, encloseTableName=True,
-                commitNow=True
-            )
-            # self.makeTable1980(src)
-        elif '2000' in src:
-            self.createTable(
-                self.bulletins2000_table_fmt,
-                src,
-                ifNotExists=True, encloseTableName=True,
-                commitNow=True
-            )
-            # self.makeTable2000(src)
-        else:
-            raise ValueError("Key was invalid. No appropriate table found.")
-        
+        # Directly create with the appropriate table formatspec
+        self.createTable(
+            self.srcfmts[src],
+            src,
+            ifNotExists=True, encloseTableName=True,
+            commitNow=True
+        )   
         self.reloadTables()
-            
-    
-    # def makeTable1980(self, src: str):
-    #     stmt = "create table if not exists %s(%s)" % (
-    #         src,
-    #         self._makeTableStatement(self.bulletins1980_table_fmt))
-    #     # print(stmt)
-        
-    #     self.execute(stmt)
-    #     self.commit()
-        
-    
-    # def makeTable2000(self, src: str):
-    #     stmt = "create table if not exists %s(%s)" % (
-    #         src,
-    #         self._makeTableStatement(self.bulletins2000_table_fmt))
-    #     # print(stmt)
-        
-    #     self.execute(stmt)
-    #     self.commit()
     
     def insertIntoTable(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
         # We can directly insert, since the table knows the format in sew now
@@ -197,57 +195,6 @@ class BulletinDatabase(sew.Database):
                 encloseTableName=True)
         except sq.IntegrityError as e:
             print("Skipping due to unique constraint failure.")
-        
-        # if '1980' in src:
-        #     # self.insertIntoTable1980(src, bulletins, time_retrieved, replace)
-        # elif '2000' in src:
-        #     # self.insertIntoTable2000(src, bulletins, time_retrieved, replace)
-        # else:
-        #     raise ValueError("Key was invalid. No appropriate table found.")
-    
-    # def insertIntoTable1980(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
-    #     try:
-    #         self._tables[src].insertMany(
-    #             ((time_retrieved, *bulletin) for bulletin in bulletins),
-    #             orReplace=False,
-    #             commitNow=True,
-    #             encloseTableName=True)
-    #     except sq.IntegrityError as e:
-    #         print("Skipping due to unique constraint failure.")
-
-        # stmt = "insert%s into %s values(%s)" % (
-        #     " or replace" if replace else "",
-        #     src,
-        #     self._makeQuestionMarks(self.bulletins1980_table_fmt))
-        # # print(stmt)
-        # We use generator expression to stitch the time retrieved
-        # try:
-        #     self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
-        #     self.commit()
-        # except sq.IntegrityError as e:
-        #     print("Skipping due to unique constraint failure.")
-    
-    # def insertIntoTable2000(self, src: str, bulletins: list, time_retrieved: int, replace: bool=False):
-    #     try:
-    #         self._tables[src].insertMany(
-    #             ((time_retrieved, *bulletin) for bulletin in bulletins),
-    #             orReplace=False,
-    #             commitNow=True,
-    #             encloseTableName=True)
-    #     except sq.IntegrityError as e:
-    #         print("Skipping due to unique constraint failure.")
-        
-        # stmt = "insert%s into %s values(%s)" % (
-        #     " or replace" if replace else "",
-        #     src,
-        #     self._makeQuestionMarks(self.bulletins2000_table_fmt))
-        # # print(stmt)
-        # # We use generator expression to stitch the time retrieved
-        # try:
-        #     self.executemany(stmt, ((time_retrieved, *bulletin) for bulletin in bulletins))
-        #     self.commit()
-        # except sq.IntegrityError as e:
-        #     print("Skipping due to unique constraint failure.")
             
     ######### These getters are a bit useless by themselves, usually you would want to extract the latest values for each individual variable
     def getBulletin1980(self, src: str, nearest_time_retrieved: int=None):
