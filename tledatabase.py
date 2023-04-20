@@ -40,6 +40,33 @@ class TleDatabase(sew.Database):
             "UNIQUE(line1, line2)"
         ]
     }
+
+    satellite_parsed_fmt = {
+        'cols': [
+            # Line 1 Parameters
+            ["satnumber", "INTEGER"],
+            ["classification", "TEXT"],
+            ["launch_yr", "INTEGER"],
+            ["launch_number", "INTEGER"],
+            ["launch_piece", "TEXT"],
+            ["epoch_yr", "INTEGER"],
+            ["epoch_day", "REAL"],
+            ["mean_motion_firstderiv", "REAL"],
+            ["drag", "REAL"],
+            ["ephem_type", "INTEGER"],
+            ["element_set_number", "INTEGER"],
+            ["checksum1", "INTEGER"],
+            # Line 2 Parameters (we ignore the repeated satnumber)
+            ["inclination_deg", "REAL"],
+            ["right_ascension_deg", "REAL"],
+            ["eccentricity", "REAL"],
+            ["argument_perigee_deg", "REAL"],
+            ["mean_anomaly_deg", "REAL"],
+            ["mean_motion_revperday", "REAL"],
+            ["rev_at_epoch", "INTEGER"],
+            ["checksum2", "INTEGER"]
+        ]
+    }
     
     #%% Constructor and other miscellaneous methods
     def __init__(self, dbpath: str):
@@ -219,6 +246,48 @@ class TleDatabase(sew.Database):
         return "%s_%s" % (src, name)
     
     #%% TLE parsing
+    @staticmethod
+    def parseTle(lines: list) -> list:
+        """
+        Parses the two lines into the format given by satellite_parsed_fmt.
+        This should return an ordered list of the appropriate types, to be inserted as a whole.
+        """
+
+        line1 = lines[0].strip()
+        line2 = lines[1].strip()
+
+        values = list()
+
+        ######### Line 1 Parameters
+        if line1[0] != "1":
+            raise ValueError("Line 1 does not start with 1.")
+
+        values.append(int(line1[2:7])) # Satellite number
+        values.append(str(line1[7])) # classification
+        values.append(int(line1[9:11])) # launch year
+        values.append(int(line1[11:14])) # launch number
+        values.append(str(line1[14:17])) # launch piece
+        values.append(int(line1[18:20])) # epoch year
+        values.append(float(line1[20:32])) # epoch day
+        values.append(float(line1[33:43])) # mean motion first deriv
+
+        s = line1[44:52] # for mean motion second deriv, need to parse a bit
+        s = s[:6] + 'e' + s[6:] # Add the e so we can turn into a float
+        values.append(float(s)) # mean motion second deriv
+
+        s = line1[53:61] # similar parsing for drag term
+        s = s[:6] + 'e' + s[6:] # Add the e so we can turn into a float
+        values.append(float(s)) # drag term
+
+        values.append(int(line1[62])) # ephemeris type
+        values.append(int(line1[64:68])) # element set number
+        values.append(int(line1[68])) # checksum
+
+        ######### Line 2 Parameters
+        
+
+
+
     @staticmethod # allow calls from outside a class object
     def parseTleData(datasrc: str):
         tles = dict()
