@@ -272,11 +272,11 @@ class TleDatabase(sew.Database):
         values.append(float(line1[33:43])) # mean motion first deriv
 
         s = line1[44:52] # for mean motion second deriv, need to parse a bit
-        s = s[:6] + 'e' + s[6:] # Add the e so we can turn into a float
+        s = s[0] + '.' + s[:6] + 'e' + s[6:] # Add the e and decimal point so we can turn into a float
         values.append(float(s)) # mean motion second deriv
 
         s = line1[53:61] # similar parsing for drag term
-        s = s[:6] + 'e' + s[6:] # Add the e so we can turn into a float
+        s = s[:6] + 'e' + s[6:] # Add the e and decimal point so we can turn into a float
         values.append(float(s)) # drag term
 
         values.append(int(line1[62])) # ephemeris type
@@ -284,8 +284,36 @@ class TleDatabase(sew.Database):
         values.append(int(line1[68])) # checksum
 
         ######### Line 2 Parameters
+        if line2[0] != "2":
+            raise ValueError("Line 2 does not start with 2.")
         
+        if line2[2:7] != line1[2:7]:
+            raise ValueError("Line 2 satellite number does not match line 1.")
+        
+        values.append(float(line2[8:16])) # inclination
+        values.append(float(line2[17:25])) # right ascension
 
+        s = line2[26:33]
+        s = "." + s # add decimal point
+        values.append(float(s)) # eccentricity
+
+        values.append(float(line2[34:42])) # perigee
+        values.append(float(line2[43:51])) # mean anomaly
+        values.append(float(line2[52:63])) # mean motion, rev per day
+        values.append(int(line2[63:68])) # rev number at epoch
+        values.append(int(line2[68])) # checksum
+
+        return values
+        
+    @staticmethod
+    def recreateTle(values: list):
+        """
+        This is the reverse of the parse function.
+        By definition, this must recreate the text of the two lines exactly.
+        """
+
+        line1 = "1 %5d%1s %2d%03d%3s %02d%3.8f %0.8f"
+        # TODO: complete
 
 
     @staticmethod # allow calls from outside a class object
