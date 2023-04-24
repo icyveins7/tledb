@@ -113,6 +113,6 @@ if __name__ == "__main__":
     bot.setAdmin(int(sys.argv[1]))
     # Configure the databases
     bot.tledb.setSrcs(["geo"])
-    bot.bulletindb.setSrcs(["dailyiau2000"])
+    bot.bulletindb.setSrcs(["dailyiau2000", "dailyiau1980"])
     # Run
     bot.run()
