@@ -1,6 +1,14 @@
 # This is a telegram bot to automate and control the
 # periodic updates for the two databases.
 
+"""
+status - Checks if bot is alive.
+begin - Starts the recurring update job. Run once, after every restart.
+update - Forces an update of the database right now.
+download - Downloads either or both the databases.
+"""
+
+
 from bulletindatabase import BulletinDatabase
 from tledatabase import TleDatabase
 
@@ -34,13 +42,13 @@ class TleBulletinInterface:
         self._app.add_handler(CommandHandler(
             "begin",
             self.begin,
-            filters=self.ufilts & self._adminfilter
+            filters=self.ufilts
         ))
         print("Adding TleBulletinInterface:update")
         self._app.add_handler(CommandHandler(
             "update",
             self.update,
-            filters=self.ufilts & self._adminfilter
+            filters=self.ufilts
         ))
         print("Adding TleBulletinInterface:download")
         self._app.add_handler(CommandHandler(
