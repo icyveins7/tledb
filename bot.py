@@ -9,8 +9,8 @@ import common_bot_interfaces as cbi
 import datetime as dt
 import sys
 
-from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 class TleBulletinInterface:
     def __init__(self, *args, **kwargs):
@@ -21,8 +21,10 @@ class TleBulletinInterface:
         self.updateFrequency = 7200.0 # How often to update in seconds
 
         # We fix the filepaths, not much point making it configurable
-        self.tledb = TleDatabase("tles.db")
-        self.bulletindb = BulletinDatabase("bulletins.db")
+        self.tledbpath = "tles.db"
+        self.bulletindbpath = "bulletins.db"
+        self.tledb = TleDatabase(self.tledbpath)
+        self.bulletindb = BulletinDatabase(self.bulletindbpath)
 
     def _addInterfaceHandlers(self):
         super()._addInterfaceHandlers()
@@ -39,6 +41,17 @@ class TleBulletinInterface:
             "update",
             self.update,
             filters=self.ufilts & self._adminfilter
+        ))
+        print("Adding TleBulletinInterface:download")
+        self._app.add_handler(CommandHandler(
+            "download",
+            self.download,
+            filters=self.ufilts
+        ))
+        print("Adding TleBulletinInterface:_downloadResponse")
+        self._app.add_handler(MessageHandler(
+            self.ufilts & filters.Regex("Download"),
+            self._downloadResponse
         ))
 
     ##########################
@@ -94,6 +107,49 @@ class TleBulletinInterface:
             chat_id = context.job.data,
             text = "Okay, I just updated the databases. This was a part of my recurring updates."
         )
+
+    ##########################
+    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Provides options to download either or both databases.
+        """
+
+        kb = ReplyKeyboardMarkup(
+            [
+                ["Download TLEs", "Download Bulletins"],
+                ["Download Both"]
+            ],
+            one_time_keyboard=True
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Select an option:",
+            reply_markup=kb
+        )
+
+    async def _downloadResponse(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Responds to the download command.
+        """
+        if update.message.text == "Download TLEs":
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(self.tledbpath, "rb")
+            )
+        elif update.message.text == "Download Bulletins":
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(self.bulletindbpath, "rb")
+            )
+        elif update.message.text == "Download Both":
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(self.tledbpath, "rb")
+            )
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(self.bulletindbpath, "rb")
+            )
 
 
 
