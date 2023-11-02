@@ -34,6 +34,9 @@ class TleBulletinInterface:
         self.tledb = TleDatabase(self.tledbpath)
         self.bulletindb = BulletinDatabase(self.bulletindbpath)
 
+        # Container to hold user download tables
+        self.downloadTables = dict()
+
     def _addInterfaceHandlers(self):
         super()._addInterfaceHandlers()
 
@@ -159,6 +162,31 @@ class TleBulletinInterface:
                 document=open(self.bulletindbpath, "rb")
             )
 
+    ##########################
+    async def add(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) == 0:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Please specify a satellite name."
+            )
+        else:
+            pass
+
+    async def _addUserTable(self, tablename: str, userid: int):
+        # Check if the tablename exists
+        sats = self.tledb.getSatellites(remove_src=False)
+        if tablename in sats:
+            # Add the table to the set for this user
+            if userid not in self.downloadTables[userid]:
+                self.downloadTables[userid] = set()
+            self.downloadTables[userid].add(tablename)
+
+        else:
+            # TODO return nearby? tablenames if any
+            pass
+            
+
+
 
 
 #%% #################################
@@ -173,6 +201,11 @@ class TleBulletinBot(
 
 #%% ##################################
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python tlebulletinbot.py <admin_id>")
+        print("If using bot runner, then: python -m common_bot_interfaces.bot_runner tlebulletinbot.py <admin_id>")
+        sys.exit(1)
+
     bot = TleBulletinBot.fromEnvVar('TLEBULLETINBOT_TOKEN')
     bot.setAdmin(int(sys.argv[1]))
     # Configure the databases
