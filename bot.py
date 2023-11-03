@@ -5,7 +5,10 @@
 status - Checks if bot is alive.
 begin - Starts the recurring update job. Run once, after every restart.
 update - Forces an update of the database right now.
-download - Downloads either or both the databases.
+download - Downloads either or both the databases. Optional: (starttime) (stoptime).
+add - Adds a TLE table to the download selection.
+selection - Views your current TLE download selection.
+clear - Clears your download selection.
 """
 
 
@@ -16,6 +19,8 @@ import common_bot_interfaces as cbi
 
 import datetime as dt
 import sys
+import os
+import pickle
 
 from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -35,7 +40,13 @@ class TleBulletinInterface:
         self.bulletindb = BulletinDatabase(self.bulletindbpath)
 
         # Container to hold user download tables
-        self.downloadTables = dict()
+        self.downloadTablesPicklePath = "UserDownloadTables.pkl"
+        if os.path.exists(self.downloadTablesPicklePath):
+            with open(self.downloadTablesPicklePath, "rb") as f:
+                self.downloadTables = pickle.load(f)
+        else:
+            self.downloadTables = dict()
+        print(self.downloadTables)
 
     def _addInterfaceHandlers(self):
         super()._addInterfaceHandlers()
@@ -59,11 +70,11 @@ class TleBulletinInterface:
             self.download,
             filters=self.ufilts
         ))
-        print("Adding TleBulletinInterface:_downloadResponse")
-        self._app.add_handler(MessageHandler(
-            self.ufilts & filters.Regex("Download"),
-            self._downloadResponse
-        ))
+        # print("Adding TleBulletinInterface:_downloadResponse")
+        # self._app.add_handler(MessageHandler(
+        #     self.ufilts & filters.Regex("Download"),
+        #     self._downloadResponse
+        # ))
         print("Adding TleBulletinInterface:selection")
         self._app.add_handler(CommandHandler(
             "selection",
@@ -74,6 +85,12 @@ class TleBulletinInterface:
         self._app.add_handler(CommandHandler(
             "add",
             self.add,
+            filters=self.ufilts
+        ))
+        print("Adding TleBulletinInterface:clear")
+        self._app.add_handler(CommandHandler(
+            "clear",
+            self.clear,
             filters=self.ufilts
         ))
 
@@ -136,43 +153,89 @@ class TleBulletinInterface:
         """
         Provides options to download either or both databases.
         """
-
-        kb = ReplyKeyboardMarkup(
-            [
-                ["Download TLEs", "Download Bulletins"],
-                ["Download Both"]
-            ],
-            one_time_keyboard=True
-        )
-        await context.bot.send_message(
+        # Send TLE db
+        await self._downloadUserTles(update, context)
+        # Send bulletin db
+        await context.bot.send_document(
             chat_id=update.effective_chat.id,
-            text="Select an option:",
-            reply_markup=kb
+            document=open(self.bulletindbpath, "rb")
         )
 
-    async def _downloadResponse(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """
-        Responds to the download command.
-        """
-        if update.message.text == "Download TLEs":
-            await context.bot.send_document(
+    async def _downloadUserTles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # If no selection yet, then tell the user
+        usertables = self.downloadTables.get(update.effective_chat.id)
+        if usertables is None or len(usertables) == 0:
+            await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                document=open(self.tledbpath, "rb")
+                text="You have no selected TLE tables for download. Add them with /add."
             )
-        elif update.message.text == "Download Bulletins":
-            await context.bot.send_document(
+
+        else:
+            await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                document=open(self.bulletindbpath, "rb")
+                text="Please wait while I prepare your selection."
             )
-        elif update.message.text == "Download Both":
-            await context.bot.send_document(
-                chat_id=update.effective_chat.id,
-                document=open(self.tledbpath, "rb")
+
+            # Create a db for this user on disk
+            userdbpath = "tles_%d.db" % (update.effective_chat.id)
+            userdb = TleDatabase(userdbpath)
+
+            # Create the user's tables in the db
+            for tablename in usertables:
+                userdb.makeSatelliteTable(None, tablename)
+            userdb.close() # We don't need it to be open any more
+
+            # Attach the user db for inserts
+            if len(context.args) <= 2:
+                self.tledb.execute(
+                    "ATTACH DATABASE '%s' AS userdb" % (userdbpath)
+                )
+
+            # Insert the user's tables' rows into the new db in full
+            if len(context.args) == 0:
+                for tablename in usertables:
+                    self.tledb.execute(
+                        "INSERT INTO userdb.'%s' SELECT * FROM '%s'" % (tablename, tablename)
+                    )
+                self.tledb.commit()
+
+                # Send the newly created user db
+                await context.bot.send_document(
+                    chat_id=update.effective_chat.id,
+                    document=open(userdbpath, "rb")
+                )
+
+            # Or insert rows starting from a certain time
+            elif len(context.args) == 1:
+                for tablename in usertables:
+                    self.tledb.execute(
+                        "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ?" % (tablename, tablename),
+                        (int(context.args[0]),)
+                    )
+                self.tledb.commit()
+
+            # Or insert rows starting from a certain time and stopping at a certain time
+            elif len(context.args) == 2:
+                for tablename in usertables:
+                    self.tledb.execute(
+                        "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ? AND time_retrieved < ?" % (tablename, tablename),
+                        (int(context.args[0]), int(context.args[1]))
+                    )
+                self.tledb.commit()
+
+            else:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Invalid number of arguments. Calling args are:\n" + 
+                    "/download (optional: start time) (optional: stop time)\n" + 
+                    "Example: /download 1672800000 1672900000"
+                )
+
+            # Cleanup and Delete the user db from disk
+            self.tledb.execute(
+                "DETACH DATABASE userdb"
             )
-            await context.bot.send_document(
-                chat_id=update.effective_chat.id,
-                document=open(self.bulletindbpath, "rb")
-            )
+            os.remove(userdbpath)
 
     ##########################
     async def selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -189,9 +252,10 @@ class TleBulletinInterface:
             s = "\n".join(userTables)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="These are your selected tables for downloads: " + s
+                text="These are your selected tables for downloads: \n\n" + s
             )
 
+    ##########################
     async def add(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Command for the user to add a table to his/her download list.
@@ -218,8 +282,9 @@ class TleBulletinInterface:
                     self.downloadTables[userid] = set()
                 self.downloadTables[userid].add(sat)
 
-                # TODO: dump to file for caching user selections
-
+                # Dump to file for caching user selections
+                with open(self.downloadTablesPicklePath, "wb") as f:
+                    pickle.dump(self.downloadTables, f)
 
                 # Update the user
                 await context.bot.send_message(
@@ -238,7 +303,7 @@ class TleBulletinInterface:
             if len(closeMatches) > 0:
                 await context.bot.send_message(
                     chat_id=userid,
-                    text="Sorry, I don't know about that satellite." + 
+                    text="Sorry, I don't know about that satellite. " + 
                         "Maybe you were looking for one of the following?\n\n" 
                         + "\n".join(closeMatches)
                 )
@@ -248,6 +313,21 @@ class TleBulletinInterface:
                     text="Sorry, I don't know about that satellite. Check your spelling?"
                 )
 
+    ##########################
+    async def clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Clears the user's download selection.
+        """
+        if self.downloadTables[update.effective_chat.id] is not None:
+            self.downloadTables[update.effective_chat.id].clear()
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Your download list has been cleared."
+        )
+
+        # Dump to file for caching user selections
+        with open(self.downloadTablesPicklePath, "wb") as f:
+            pickle.dump(self.downloadTables, f)
 
 
 #%% #################################
