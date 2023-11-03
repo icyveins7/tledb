@@ -199,18 +199,12 @@ class TleBulletinInterface:
                     )
                 self.tledb.commit()
 
-                # Send the newly created user db
-                await context.bot.send_document(
-                    chat_id=update.effective_chat.id,
-                    document=open(userdbpath, "rb")
-                )
-
             # Or insert rows starting from a certain time
             elif len(context.args) == 1:
                 for tablename in usertables:
                     self.tledb.execute(
                         "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ?" % (tablename, tablename),
-                        (int(context.args[0]),)
+                        (float(context.args[0]),)
                     )
                 self.tledb.commit()
 
@@ -219,7 +213,7 @@ class TleBulletinInterface:
                 for tablename in usertables:
                     self.tledb.execute(
                         "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ? AND time_retrieved < ?" % (tablename, tablename),
-                        (int(context.args[0]), int(context.args[1]))
+                        (float(context.args[0]), float(context.args[1]))
                     )
                 self.tledb.commit()
 
@@ -232,9 +226,15 @@ class TleBulletinInterface:
                 )
 
             # Cleanup and Delete the user db from disk
-            self.tledb.execute(
-                "DETACH DATABASE userdb"
-            )
+            if len(context.args) <= 2:
+                self.tledb.execute(
+                    "DETACH DATABASE userdb"
+                )
+                # Send the newly created user db
+                await context.bot.send_document(
+                    chat_id=update.effective_chat.id,
+                    document=open(userdbpath, "rb")
+                )
             os.remove(userdbpath)
 
     ##########################
