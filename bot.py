@@ -64,6 +64,18 @@ class TleBulletinInterface:
             self.ufilts & filters.Regex("Download"),
             self._downloadResponse
         ))
+        print("Adding TleBulletinInterface:selection")
+        self._app.add_handler(CommandHandler(
+            "selection",
+            self.selection,
+            filters=self.ufilts
+        ))
+        print("Adding TleBulletinInterface:add")
+        self._app.add_handler(CommandHandler(
+            "add",
+            self.add,
+            filters=self.ufilts
+        ))
 
     ##########################
     async def begin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -163,29 +175,78 @@ class TleBulletinInterface:
             )
 
     ##########################
+    async def selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Command to display user selected tables for download.
+        """
+        userTables = self.downloadTables.get(update.effective_chat.id)
+        if userTables is None or len(userTables) == 0:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="You have no tables in your download list."
+            )
+        else:
+            s = "\n".join(userTables)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="These are your selected tables for downloads: " + s
+            )
+
     async def add(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Command for the user to add a table to his/her download list.
+        """
         if len(context.args) == 0:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="Please specify a satellite name."
             )
         else:
-            pass
+            await self._addUserTable(context, update.effective_chat.id)
 
-    async def _addUserTable(self, tablename: str, userid: int):
+    async def _addUserTable(self, context: ContextTypes.DEFAULT_TYPE, userid: int):
         # Check if the tablename exists
-        sats = self.tledb.getSatellites(remove_src=False)
-        if tablename in sats:
-            # Add the table to the set for this user
-            if userid not in self.downloadTables[userid]:
-                self.downloadTables[userid] = set()
-            self.downloadTables[userid].add(tablename)
+        sats = self.tledb.tablenames
+        tablename = " ".join(context.args)
+        print("%d asked for: %s" % (userid, tablename))
 
-        else:
-            # TODO return nearby? tablenames if any
-            pass
-            
+        found = False
+        for sat in sats:
+            if tablename in sat:
+                # Add the table to the set for this user
+                if userid not in self.downloadTables:
+                    self.downloadTables[userid] = set()
+                self.downloadTables[userid].add(sat)
 
+                # TODO: dump to file for caching user selections
+
+
+                # Update the user
+                await context.bot.send_message(
+                    chat_id=userid,
+                    text="Okay, I have added %s to your download list." % sat
+                )
+                found = True
+
+        if not found:
+            # Just do a coarse contains for now; we do fuzzy matching later
+            closeMatches = [sat for sat in sats if tablename.lower() in sat.lower()]
+            print(closeMatches)
+            print(sats)
+
+            # Update the user
+            if len(closeMatches) > 0:
+                await context.bot.send_message(
+                    chat_id=userid,
+                    text="Sorry, I don't know about that satellite." + 
+                        "Maybe you were looking for one of the following?\n\n" 
+                        + "\n".join(closeMatches)
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=userid,
+                    text="Sorry, I don't know about that satellite. Check your spelling?"
+                )
 
 
 
@@ -202,8 +263,8 @@ class TleBulletinBot(
 #%% ##################################
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python tlebulletinbot.py <admin_id>")
-        print("If using bot runner, then: python -m common_bot_interfaces.bot_runner tlebulletinbot.py <admin_id>")
+        print("Usage: python bot.py <admin_id>")
+        print("If using bot runner, then: python -m common_bot_interfaces.bot_runner bot.py <admin_id>")
         sys.exit(1)
 
     bot = TleBulletinBot.fromEnvVar('TLEBULLETINBOT_TOKEN')
