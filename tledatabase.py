@@ -344,9 +344,12 @@ class TleDatabase(sew.Database):
         
     #%% Individual satellite tables
     def makeSatelliteTable(self, src: str, name: str):
+        # Prefix the src if provided; if already in the tablename then ignore
+        tablename = self._makeSatelliteTableName(src, name) if src is not None else name
+
         self.createTable(
             self.satellite_table_fmt, 
-            self._makeSatelliteTableName(src, name), 
+            tablename, 
             ifNotExists=True, encloseTableName=True, commitNow=True)
         self.reloadTables()
         
