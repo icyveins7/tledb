@@ -163,7 +163,7 @@ class TleBulletinInterface:
 
     async def _downloadUserTles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # If no selection yet, then tell the user
-        usertables = self.downloadTables.get(update.effective_chat.id)
+        usertables = self.downloadTables.get(update.effective_user.id)
         if usertables is None or len(usertables) == 0:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
@@ -177,7 +177,7 @@ class TleBulletinInterface:
             )
 
             # Create a db for this user on disk
-            userdbpath = "tles_%d.db" % (update.effective_chat.id)
+            userdbpath = "tles_%d.db" % (update.effective_user.id)
             userdb = TleDatabase(userdbpath)
 
             # Create the user's tables in the db
@@ -242,7 +242,7 @@ class TleBulletinInterface:
         """
         Command to display user selected tables for download.
         """
-        userTables = self.downloadTables.get(update.effective_chat.id)
+        userTables = self.downloadTables.get(update.effective_user.id)
         if userTables is None or len(userTables) == 0:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
@@ -266,10 +266,11 @@ class TleBulletinInterface:
                 text="Please specify a satellite name."
             )
         else:
-            await self._addUserTable(context, update.effective_chat.id)
+            await self._addUserTable(update, context)
 
-    async def _addUserTable(self, context: ContextTypes.DEFAULT_TYPE, userid: int):
+    async def _addUserTable(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Check if the tablename exists
+        userid = update.effective_user.id
         sats = self.tledb.tablenames
         tablename = " ".join(context.args)
         print("%d asked for: %s" % (userid, tablename))
@@ -288,7 +289,7 @@ class TleBulletinInterface:
 
                 # Update the user
                 await context.bot.send_message(
-                    chat_id=userid,
+                    chat_id=update.effective_chat.id,
                     text="Okay, I have added %s to your download list." % sat
                 )
                 found = True
@@ -302,14 +303,14 @@ class TleBulletinInterface:
             # Update the user
             if len(closeMatches) > 0:
                 await context.bot.send_message(
-                    chat_id=userid,
+                    chat_id=update.effective_chat.id,
                     text="Sorry, I don't know about that satellite. " + 
                         "Maybe you were looking for one of the following?\n\n" 
                         + "\n".join(closeMatches)
                 )
             else:
                 await context.bot.send_message(
-                    chat_id=userid,
+                    chat_id=update.effective_chat.id,
                     text="Sorry, I don't know about that satellite. Check your spelling?"
                 )
 
@@ -318,8 +319,8 @@ class TleBulletinInterface:
         """
         Clears the user's download selection.
         """
-        if self.downloadTables[update.effective_chat.id] is not None:
-            self.downloadTables[update.effective_chat.id].clear()
+        if self.downloadTables[update.effective_user.id] is not None:
+            self.downloadTables[update.effective_user.id].clear()
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text="Your download list has been cleared."
