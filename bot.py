@@ -153,13 +153,19 @@ class TleBulletinInterface:
         """
         Provides options to download either or both databases.
         """
+        # Show error message if number of args is wrong
+        if len(context.args) > 2:
+             await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Invalid number of arguments. Calling args are:\n" + 
+                "/download (optional: start time) (optional: stop time)\n" + 
+                "Example: /download 1672800000 1672900000"
+            )
+
         # Send TLE db
         await self._downloadUserTles(update, context)
         # Send bulletin db
-        await context.bot.send_document(
-            chat_id=update.effective_chat.id,
-            document=open(self.bulletindbpath, "rb")
-        )
+        await self._downloadUserBulletins(update, context)
 
     async def _downloadUserTles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # If no selection yet, then tell the user
@@ -216,14 +222,9 @@ class TleBulletinInterface:
                         (float(context.args[0]), float(context.args[1]))
                     )
                 self.tledb.commit()
+                
+            # We don't need a separate message here for showing the calling structure
 
-            else:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="Invalid number of arguments. Calling args are:\n" + 
-                    "/download (optional: start time) (optional: stop time)\n" + 
-                    "Example: /download 1672800000 1672900000"
-                )
 
             # Cleanup and Delete the user db from disk
             if len(context.args) <= 2:
@@ -236,6 +237,62 @@ class TleBulletinInterface:
                     document=open(userdbpath, "rb")
                 )
             os.remove(userdbpath)
+
+    async def _downloadUserBulletins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # For bulletins, we just download according to the time selection, if specified
+        if len(context.args) == 0:
+            # Send the full database
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(self.bulletindbpath, "rb")
+            )
+        elif len(context.args) <= 2:
+            # Extract from the arguments
+            start = float(context.args[0]) if len(context.args) >= 1 else None
+            end = float(context.args[1]) if len(context.args) >= 2 else None
+
+            # Create a new database
+            userbulletindbpath = "bulletins_%d.db" % (update.effective_user.id)
+            userbulletinsdb = BulletinDatabase(userbulletindbpath)
+
+            # Recreate the same tables in the current database
+            for src in self.bulletindb.tablenames:
+                userbulletinsdb.makeBulletinTable(src)
+            userbulletinsdb.close() # We don't need it to be open any more
+            # Then attach the user db to the current one
+            self.bulletindb.execute(
+                "ATTACH DATABASE '%s' AS userbulletinsdb" % (userbulletindbpath)
+            )
+
+            for src in self.bulletindb.tablenames:
+                if start is not None:
+                    if end is not None:
+                        # Slice between the two timings and insert
+                        userbulletinsdb.execute(
+                            "INSERT INTO userbulletinsdb.'%s' SELECT * FROM '%s' WHERE time_retrieved >? AND time_retrieved <?" % (src, src),
+                            (start, end)
+                        )
+                    else:
+                        # Slice from the start time and insert
+                        userbulletinsdb.execute(
+                            "INSERT INTO userbulletinsdb.'%s' SELECT * FROM '%s' WHERE time_retrieved >?" % (src, src),
+                            (start,)
+                        )
+                
+            self.bulletindb.commit()
+            self.bulletindb.execute(
+                "DETACH DATABASE userbulletinsdb"
+            )
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(userbulletindbpath, "rb")
+            )
+
+            # Delete the user bulletins db from disk
+            os.remove(userbulletindbpath)
+
+        # We don't need a separate message here for showing the calling structure
+
 
     ##########################
     async def selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
