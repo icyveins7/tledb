@@ -124,6 +124,11 @@ class TleBulletinInterface:
 
     ##########################
     async def update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Please wait while I update the databases."
+        )
+
         # Force an update right now
         self.tledb.update()
         self.bulletindb.update()
@@ -222,7 +227,7 @@ class TleBulletinInterface:
                         (float(context.args[0]), float(context.args[1]))
                     )
                 self.tledb.commit()
-                
+
             # We don't need a separate message here for showing the calling structure
 
 
@@ -268,13 +273,13 @@ class TleBulletinInterface:
                 if start is not None:
                     if end is not None:
                         # Slice between the two timings and insert
-                        userbulletinsdb.execute(
+                        self.bulletindb.execute(
                             "INSERT INTO userbulletinsdb.'%s' SELECT * FROM '%s' WHERE time_retrieved >? AND time_retrieved <?" % (src, src),
                             (start, end)
                         )
                     else:
                         # Slice from the start time and insert
-                        userbulletinsdb.execute(
+                        self.bulletindb.execute(
                             "INSERT INTO userbulletinsdb.'%s' SELECT * FROM '%s' WHERE time_retrieved >?" % (src, src),
                             (start,)
                         )
