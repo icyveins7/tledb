@@ -272,7 +272,7 @@ class TleDatabase(sew.Database):
         values.append(float(line1[33:43])) # mean motion first deriv
 
         s = line1[44:52] # for mean motion second deriv, need to parse a bit
-        s = s[0] + '.' + s[:6] + 'e' + s[6:] # Add the e and decimal point so we can turn into a float
+        s = s[0] + '.' + s[1:6] + 'e' + s[6:] # Add the e and decimal point so we can turn into a float
         values.append(float(s)) # mean motion second deriv
 
         s = line1[53:61] # similar parsing for drag term
