@@ -313,7 +313,8 @@ class TleDatabase(sew.Database):
         """
 
         line1 = "1 %5d%1s %2d%03d%3s %02d%3.8f %0.8f"
-        # TODO: complete
+        
+        raise NotImplementedError("This function is still incomplete.")
 
 
     @staticmethod # allow calls from outside a class object
