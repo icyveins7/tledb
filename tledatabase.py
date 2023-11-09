@@ -67,6 +67,18 @@ class TleDatabase(sew.Database):
             ["checksum2", "INTEGER"]
         ]
     }
+
+    # In order to save storage, we move all the repeated fields in TLEs into a single table
+    satellite_catalog_fmt = {
+        'cols': [
+            ["satnumber", "INTEGER"],
+            ["classification", "TEXT"],
+            ["launch_yr", "INTEGER"],
+            ["launch_number", "INTEGER"],
+            ["launch_piece", "TEXT"],
+            ["name", "TEXT"]
+        ]
+    }
     
     #%% Constructor and other miscellaneous methods
     def __init__(self, dbpath: str):
