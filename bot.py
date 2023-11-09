@@ -93,6 +93,12 @@ class TleBulletinInterface:
             self.clear,
             filters=self.ufilts
         ))
+        print("Adding TleBulletinInterface:sources")
+        self._app.add_handler(CommandHandler(
+            "sources",
+            self.sources,
+            filters=self.ufilts & self._adminfilter # Provided by other interfaces in the class definition at the end
+        ))
 
     ##########################
     async def begin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -392,6 +398,27 @@ class TleBulletinInterface:
         with open(self.downloadTablesPicklePath, "wb") as f:
             pickle.dump(self.downloadTables, f)
 
+    ##########################
+    async def sources(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) == 0:
+            # Show the available set of sources
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="These are the available sources:\n" + "\n".join(
+                    [key for key in self.tledb.getAvailableSrcs()]
+                )
+            )
+
+        else:
+            # Replace with specified sources
+            self.tledb.setSrcs(context.args)
+
+        # No matter what, show what is used now
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="These are your used sources now:\n" + "\n".join(self.tledb.usedSrcs)
+        )
+
 
 #%% #################################
 class TleBulletinBot(
@@ -408,6 +435,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python bot.py <admin_id>")
         print("If using bot runner, then: python -m common_bot_interfaces.bot_runner bot.py <admin_id>")
+        print("Place your bot token in the environment variable TLEBULLETINBOT_TOKEN.")
         sys.exit(1)
 
     bot = TleBulletinBot.fromEnvVar('TLEBULLETINBOT_TOKEN')
