@@ -69,14 +69,15 @@ class TleDatabase(sew.Database):
     }
 
     # In order to save storage, we move all the repeated fields in TLEs into a single table
-    satellite_catalog_fmt = {
+    satellite_metadata_tblname = "satellite_metadata"
+    satellite_metadata_fmt = {
         'cols': [
+            ["data_tblname", "TEXT"],
             ["satnumber", "INTEGER"],
             ["classification", "TEXT"],
             ["launch_yr", "INTEGER"],
             ["launch_number", "INTEGER"],
-            ["launch_piece", "TEXT"],
-            ["name", "TEXT"]
+            ["launch_piece", "TEXT"]
         ]
     }
     
@@ -92,6 +93,13 @@ class TleDatabase(sew.Database):
         '''
         super().__init__(dbpath)
         self._usedSrcs = None
+
+        # Create the catalog metadata table if it doesn't exist
+        # self.createMetaTable(
+        #     self.satellite_metadata_fmt,
+        #     self.satellite_metadata_tblname,
+        #     ifNotExists=True
+        # ) # TODO: Don't enable until ready
         
     #%% Discovery methods
     def getAvailableSrcs(self):
@@ -364,6 +372,23 @@ class TleDatabase(sew.Database):
             self.satellite_table_fmt, 
             tablename, 
             ifNotExists=True, encloseTableName=True, commitNow=True)
+        
+        self.reloadTables()
+
+    def makeSatelliteTable_v2(self, src: str, name: str):
+        # Prefix the src if provided; if already in the tablename then ignore
+        tablename = self._makeSatelliteTableName(src, name) if src is not None else name
+
+        # Make a data table tagged to the metadata table
+        satellite_metadata = dict()
+        self.createDataTable(
+            self.satellite_table_fmt, 
+            tablename, 
+            satellite_metadata,
+            self.satellite_metadata_tblname,
+            ifNotExists=True, encloseTableName=True, commitNow=True
+        )
+        
         self.reloadTables()
         
     def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str, replace: bool=False):
