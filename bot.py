@@ -24,6 +24,7 @@ import pickle
 
 from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+import telegram
 
 class TleBulletinInterface:
     def __init__(self, *args, **kwargs):
@@ -174,9 +175,21 @@ class TleBulletinInterface:
             )
 
         # Send TLE db
-        await self._downloadUserTles(update, context)
+        try:
+            await self._downloadUserTles(update, context)
+        except telegram.error.TimedOut:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Timed out while uploading your TLE database. Try specifying a smaller time window."
+            )
         # Send bulletin db
-        await self._downloadUserBulletins(update, context)
+        try:
+            await self._downloadUserBulletins(update, context)
+        except telegram.error.TimedOut:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Timed out while uploading your bulletin database. Try specifying a smaller time window."
+            )
 
     async def _downloadUserTles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # If no selection yet, then tell the user
