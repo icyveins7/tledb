@@ -221,33 +221,40 @@ class TleBulletinInterface:
                     "ATTACH DATABASE '%s' AS userdb" % (userdbpath)
                 )
 
-            # Insert the user's tables' rows into the new db in full
-            if len(context.args) == 0:
-                for tablename in usertables:
-                    self.tledb.execute(
-                        "INSERT INTO userdb.'%s' SELECT * FROM '%s'" % (tablename, tablename)
-                    )
-                self.tledb.commit()
+            try:
+                # Insert the user's tables' rows into the new db in full
+                if len(context.args) == 0:
+                    for tablename in usertables:
+                        self.tledb.execute(
+                            "INSERT INTO userdb.'%s' SELECT * FROM '%s'" % (tablename, tablename)
+                        )
+                    self.tledb.commit()
 
-            # Or insert rows starting from a certain time
-            elif len(context.args) == 1:
-                for tablename in usertables:
-                    self.tledb.execute(
-                        "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ?" % (tablename, tablename),
-                        (float(context.args[0]),)
-                    )
-                self.tledb.commit()
+                # Or insert rows starting from a certain time
+                elif len(context.args) == 1:
+                    for tablename in usertables:
+                        self.tledb.execute(
+                            "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ?" % (tablename, tablename),
+                            (float(context.args[0]),)
+                        )
+                    self.tledb.commit()
 
-            # Or insert rows starting from a certain time and stopping at a certain time
-            elif len(context.args) == 2:
-                for tablename in usertables:
-                    self.tledb.execute(
-                        "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ? AND time_retrieved < ?" % (tablename, tablename),
-                        (float(context.args[0]), float(context.args[1]))
-                    )
-                self.tledb.commit()
+                # Or insert rows starting from a certain time and stopping at a certain time
+                elif len(context.args) == 2:
+                    for tablename in usertables:
+                        self.tledb.execute(
+                            "INSERT INTO userdb.'%s' SELECT * FROM '%s' WHERE time_retrieved > ? AND time_retrieved < ?" % (tablename, tablename),
+                            (float(context.args[0]), float(context.args[1]))
+                        )
+                    self.tledb.commit()
 
-            # We don't need a separate message here for showing the calling structure
+                # We don't need a separate message here for showing the calling structure
+
+            except sq.IntegrityError as e: # We must catch this so that the detach database proceeds
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="There was an error while creating your TLE database:\n" + str(e)
+                )
 
 
             # Cleanup and Delete the user db from disk
@@ -258,7 +265,8 @@ class TleBulletinInterface:
                 # Send the newly created user db
                 await context.bot.send_document(
                     chat_id=update.effective_chat.id,
-                    document=open(userdbpath, "rb")
+                    document=open(userdbpath, "rb"),
+                    write_timeout=60 # Have a longer timeout
                 )
             os.remove(userdbpath)
 
@@ -268,7 +276,8 @@ class TleBulletinInterface:
             # Send the full database
             await context.bot.send_document(
                 chat_id=update.effective_chat.id,
-                document=open(self.bulletindbpath, "rb")
+                document=open(self.bulletindbpath, "rb"),
+                write_timeout=60 # Have a longer timeout
             )
         elif len(context.args) <= 2:
             # Extract from the arguments
@@ -309,7 +318,8 @@ class TleBulletinInterface:
             )
             await context.bot.send_document(
                 chat_id=update.effective_chat.id,
-                document=open(userbulletindbpath, "rb")
+                document=open(userbulletindbpath, "rb"),
+                write_timeout=60 # Have a longer timeout
             )
 
             # Delete the user bulletins db from disk
