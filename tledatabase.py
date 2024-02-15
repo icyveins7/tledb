@@ -173,7 +173,10 @@ class TleDatabase(sew.Database):
                 if verbose:
                     print("Making table %s" % (name))
                 # Create table if necessary
-                self.makeSatelliteTable(src, name)
+                self.makeSatelliteTable(src, name, reloadNow=False) # Don't reload in this loop
+
+        # Reload only at the end
+        self.reloadTables()
 
         # Then insert
         for src, tles in alltles.items():
@@ -372,7 +375,7 @@ class TleDatabase(sew.Database):
         
         
     #%% Individual satellite tables
-    def makeSatelliteTable(self, src: str, name: str):
+    def makeSatelliteTable(self, src: str, name: str, reloadNow: bool=True):
         # Prefix the src if provided; if already in the tablename then ignore
         tablename = self._makeSatelliteTableName(src, name) if src is not None else name
 
@@ -381,24 +384,25 @@ class TleDatabase(sew.Database):
             tablename, 
             ifNotExists=True, encloseTableName=True,
             commitNow=False) # Explicitly do not commit
-        
-        self.reloadTables()
 
-    def makeSatelliteTable_v2(self, src: str, name: str):
-        # Prefix the src if provided; if already in the tablename then ignore
-        tablename = self._makeSatelliteTableName(src, name) if src is not None else name
+        if reloadNow: 
+            self.reloadTables()
 
-        # Make a data table tagged to the metadata table
-        satellite_metadata = dict()
-        self.createDataTable(
-            self.satellite_table_fmt, 
-            tablename, 
-            satellite_metadata,
-            self.satellite_metadata_tblname,
-            ifNotExists=True, encloseTableName=True, commitNow=True
-        )
+    # def makeSatelliteTable_v2(self, src: str, name: str):
+    #     # Prefix the src if provided; if already in the tablename then ignore
+    #     tablename = self._makeSatelliteTableName(src, name) if src is not None else name
+
+    #     # Make a data table tagged to the metadata table
+    #     satellite_metadata = dict()
+    #     self.createDataTable(
+    #         self.satellite_table_fmt, 
+    #         tablename, 
+    #         satellite_metadata,
+    #         self.satellite_metadata_tblname,
+    #         ifNotExists=True, encloseTableName=True, commitNow=True
+    #     )
         
-        self.reloadTables()
+    #     self.reloadTables()
         
     def insertSatelliteTle(self, src: str, name: str, time_retrieved: int, line1: str, line2: str, replace: bool=False):
         table = self._tables[self._makeSatelliteTableName(src, name)]
