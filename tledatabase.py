@@ -166,22 +166,30 @@ class TleDatabase(sew.Database):
         data, time_retrieved = self.download()
         # Parse the data
         alltles = self.parseTleDataSrcs(data)
-        # Insert rows
+
+        # Make all the tables first
         for src, tles in alltles.items():
-            # Get the time for this source
+            for name, tlelines in tles.items():
+                if verbose:
+                    print("Making table %s" % (name))
+                # Create table if necessary
+                self.makeSatelliteTable(src, name)
+
+        # Then insert
+        for src, tles in alltles.items():
+             # Get the time for this source
             src_tr = time_retrieved[src]
             # Iterate over individual satellites
             for name, tlelines in tles.items():
                 if verbose:
                     print("Updating %s" % (name))
-                # Create table if necessary
-                self.makeSatelliteTable(src, name)
                 # Insert into it
                 self.insertSatelliteTle(src, name, src_tr, tlelines[0], tlelines[1])
                 
         # Commit changes
         self.commit()
-        
+
+
     def loadTleFile(self, filepath: str, src: str, time_retrieved: int=None):
         data = dict()
         with open(filepath, "r") as fid:
@@ -371,7 +379,8 @@ class TleDatabase(sew.Database):
         self.createTable(
             self.satellite_table_fmt, 
             tablename, 
-            ifNotExists=True, encloseTableName=True, commitNow=True)
+            ifNotExists=True, encloseTableName=True,
+            commitNow=False) # Explicitly do not commit
         
         self.reloadTables()
 
@@ -395,11 +404,32 @@ class TleDatabase(sew.Database):
         table = self._tables[self._makeSatelliteTableName(src, name)]
 
         try:
-            table.insertOne(time_retrieved, line1, line2, orReplace=replace, commitNow=True)
+            table.insertOne(time_retrieved, line1, line2, orReplace=replace, commitNow=False) # Explicitly do not commit
         except sq.IntegrityError as e:
             print("Skipping insert for %s because record already exists." % (table._tbl))
         
     def getSatelliteTle(self, name: str, nearest_time_retrieved: int=None, src: str=None):
+        """
+        Returns the TLE nearest to the time specified along with the source (tablename).
+
+        Parameters
+        ----------
+        name : str
+            Satellite name or table name.
+        nearest_time_retrieved : int
+            Optional time specification; the row which was retrieved nearest to this time will be fetched.
+        src : str
+            Source of the satellite TLEs e.g. 'geo'. This is only important if the same satellite
+            appears in multiple sources.
+        
+        Returns
+        -------
+        results : list of sqlite3.Row or sqlite3.Row
+            The row/rows that are closest to the time specified.
+        table : str
+            The table that was selected based on the satellite name.
+        """
+
         # Get at the current time if unspecified
         nearest_time_retrieved = int(dt.datetime.utcnow().timestamp()) if nearest_time_retrieved is None else nearest_time_retrieved
         
